@@ -82,7 +82,10 @@ function solve_with_love_and_support(ode::ODE, p::Int)
     par = empty(ic)
     inp = empty(Dict(x[1] => [1]))
 
-    ps_sol = power_series_solution(ode_mod_p, par, ic, inp, nterms)
+    ps_soltime = @elapsed ps_sol = power_series_solution(ode_mod_p, par, ic, inp, nterms)
+    @info "Power series solution computed in $ps_soltime"
+
+    start_system_time = time()
     pss = [ps_sol[y]]
     for i in 1:n
         push!(pss, ps_diff(pss[end]))
@@ -92,8 +95,13 @@ function solve_with_love_and_support(ode::ODE, p::Int)
     prods = [prod([pss[k]^exp[k] for k in 1:length(pss)]) for exp in possible_supp]
 
     ls = matrix([coeff(pr, j) for j in 0:(nterms - n - 1), pr in prods])
+    @info "System created in $(time() - start_system_time)"
+
     @info "linear system dims $(size(ls))"
-    ker = kernel(ls, side=:right)
+    
+    system_soltime = @elapsed ker = kernel(ls, side=:right)
+    @info "Linear system solved in $system_soltime"
+    
     @info "The dimension of the solution space is $(size(ker))"
     sol = ker[:, 1]
 
