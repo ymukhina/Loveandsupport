@@ -25,30 +25,34 @@ function f_min_support_bivariate(ode::ODE)
 end
 
 function f_min_support(ode::ODE)
+    # I guess by sorting you try to ensure that the first x is the output, i am not sure
+    # this would always work. You could just choose x such that the only y_equation is equal to x
     x = sort(ode.x_vars, rev = true)
+    @info "Inferred order $x"
     n = length(x)
     gs = [ode.x_equations[xi] for xi in x]
     d1 = total_degree(gs[1])
     @assert d1 > 0 "d1 = 0"
     D = maximum(total_degree, gs[2:end])
+    @info "We have d1 = $d1 and D = $D"
 
     if d1 <= D
-        ineq_lhs = reshape([1, [d1 + (k-1)*(D-1) for k in 1:n]...], 1, n+1)
-        ineq_rhs = [prod([d1 + (k-1)*(D-1) for k in 1:n])]
-        A = vcat(matrix(QQ, ineq_lhs), -identity_matrix(QQ, n+1))
-        b = vcat(ineq_rhs, zeros(QQ, n+1))
+        ineq_lhs = reshape([1, [d1 + (k - 1) * (D - 1) for k in 1:n]...], 1, n + 1)
+        ineq_rhs = [prod([d1 + (k - 1) * (D - 1) for k in 1:n])]
+        A = vcat(matrix(QQ, ineq_lhs), -identity_matrix(QQ, n + 1))
+        b = vcat(ineq_rhs, zeros(QQ, n + 1))
     else
-        ineq_lhs1 = [k <= l ? k*(D-1) + 1 : 0 for l in 0:(n-1), k in 0:n]
-        ineq_lhs2 = zeros(Int, n, n+1)
-        for l in 0:(n-1)
-            for i in 1:(n-l)
-                ineq_lhs2[l+1, i+l+1] = i*(d1-1) + l*(D-1) + 1
+        ineq_lhs1 = [k <= l ? k * (D - 1) + 1 : 0 for l in 0:(n - 1), k in 0:n]
+        ineq_lhs2 = zeros(Int, n, n + 1)
+        for l in 0:(n - 1)
+            for i in 1:(n - l)
+                ineq_lhs2[l + 1, i + l + 1] = i * (d1 - 1) + l * (D - 1) + 1
             end
         end
-        ineq_rhs = [prod([d1 + (k-1)*(D-1) for k in 1:l])*prod([i*(d1-1) + l*(D-1) + 1 for i in 1:(n-l)])
-                    for l in 0:(n-1)]
-        A = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n+1))
-        b = vcat(ineq_rhs, zeros(QQ, n+1))
+        ineq_rhs = [prod([d1 + (k - 1) * (D - 1) for k in 1:l]) * prod([i * (d1 - 1) + l * (D - 1) + 1 for i in 1:(n - l)])
+                    for l in 0:(n - 1)]
+        A = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
+        b = vcat(ineq_rhs, zeros(QQ, n + 1))
     end
     return lattice_points(polyhedron(A, b))
 end
@@ -73,7 +77,7 @@ function solve_with_love_and_support(ode::ODE, p::Int)
     nterms = length(possible_supp) + n
 
     # random initial conditions
-    ic = Dict([x[i] => rand(1:p-1) for i in 1:n]...)
+    ic = Dict([x[i] => rand(1:p - 1) for i in 1:n]...)
     # no parameters, no inputs
     par = empty(ic)
     inp = empty(Dict(x[1] => [1]))
@@ -83,12 +87,13 @@ function solve_with_love_and_support(ode::ODE, p::Int)
     for i in 1:n
         push!(pss, ps_diff(pss[end]))
     end
+
+    # Gleb: how about broadcast: pss .^ exp ?
     prods = [prod([pss[k]^exp[k] for k in 1:length(pss)]) for exp in possible_supp]
 
     ls = matrix([coeff(pr, j) for j in 0:(nterms - n - 1), pr in prods])
     @info "linear system dims $(size(ls))"
-    #ker = kernel(ls, side = :right)
-                ker =    kernel(ls, side=:right)[2]
+    ker = kernel(ls, side=:right)
     @info "The dimension of the solution space is $(size(ker))"
     sol = ker[:, 1]
 
@@ -121,7 +126,7 @@ function check_ansatz(ode::ODE, p::Int)
 
     # the variables of io_correct
     n = ngens(R)
-    ys = gens(S)[2*(n-1)+2:3*(n-1)+2]
+    ys = gens(S)[2 * (n - 1) + 2 : 3 * (n - 1) + 2]
     @info "IO variables $(ys)"
 
     phi = hom(R, S, ys)
@@ -146,7 +151,7 @@ function rand_poly(deg, vars)
             for i in 1:length(vars)
                 monom *= vars[i]^m[i]
             end
-            result += rand(1:1000)*monom
+            result += rand(1:1000) * monom
         end
     end
 
