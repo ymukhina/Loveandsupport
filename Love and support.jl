@@ -22,7 +22,7 @@ function f_min_support_bivariate(ode::ODE)
         A = [1 d1 (2 * d1 - 1); 1 d2 (d1 + d2 - 1); -1 0 0; 0 -1 0; 0 0 -1]
         b = [d1*(2*d1 - 1), d1*(d1 + d2 - 1), 0, 0, 0]
     end
-    return lattice_points(polyhedron(A, b))
+    return polyhedron(A, b)
 end
 
 function f_min_support(ode::ODE; info = false)
@@ -55,7 +55,7 @@ function f_min_support(ode::ODE; info = false)
         A = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
         b = vcat(ineq_rhs, zeros(QQ, n + 1))
     end
-    return lattice_points(polyhedron(A, b))
+    return polyhedron(A, b)
 end
 
 # ---------------------------------------------------------------------- #
