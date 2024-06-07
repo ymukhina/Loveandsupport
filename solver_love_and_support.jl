@@ -103,7 +103,7 @@ function solve_with_love_and_support(ode::ODE, p::Int; info = true)
     
     system_soltime = @elapsed ker = kernel(ls, side=:right)
     info && @info "Linear system solved in $system_soltime"
-            dim = size(kernel(ls, side=:right))[2]
+            dim = size(ker)[2]
     info && @info "The dimension of the solution space is $(dim)"
 
     start_constructing_time = time()
