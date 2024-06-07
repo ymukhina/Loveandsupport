@@ -146,7 +146,102 @@ function eval_at_support(supp, vals)
             one_thing(e, vals, cacher)                 
         end
     return return [cacher[s] for s in supp]
-end                    
+end 
+    
+    
+    
+function qq_to_mod(a::QQFieldElem, p)
+  return numerator(a) * invmod(denominator(a), ZZ(p))
+end
+
+function russional_reconstruction(ode::ODE)
+
+   possible_supp = f_min_support(ode)
+   l_supp = length(possible_supp)
+   x = sort(ode.x_vars, rev = true)
+   n = length(x)
+   R, _ = polynomial_ring(QQ, ["x1", ["x1^($i)" for i in 1:n]...]) 
+   sort!(possible_supp, by = exp -> prod(gens(R) .^ exp), rev = true)
+   mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
+
+   sol_vector = zeros(QQ, l_supp)
+   crts = zeros(ZZ, l_supp)
+   found_cand = falses(l_supp)
+   is_stable = falses(l_supp)
+
+   prod_of_done_primes = one(ZZ)
+        
+        prim_cnt = 0
+
+   while !all(is_stable)
+
+       p = ZZ(Hecke.next_prime(rand(1:2^30)))
+                prim_cnt += 1
+            l_succ = length(findall(is_stable))
+       @info "Chose $prim_cnt th prime $p, $(l_succ) stable coefficients"
+       sol_mod_p = solve_with_love_and_support(ode, Int(p))
+       sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
+
+       for (i, a) in enumerate(sol_vector_mod_p)
+           is_stable[i] && continue
+
+           if found_cand[i]
+               sol_i_mod_p = qq_to_mod(sol_vector[i], p)
+               if sol_i_mod_p == sol_vector_mod_p[i]
+                   is_stable[i] = true
+                   continue
+               end
+           end
+
+           crts[i] = crt(lift(ZZ, a), p, ZZ(crts[i]), prod_of_done_primes)
+           
+           try
+               succ, r, s = rational_reconstruction(crts[i],
+                                                    ZZ(p*prod_of_done_primes))
+               if succ
+                   sol_vector[i] = r//s
+                   found_cand[i] = true
+               end
+                catch
+                    @info "flint crisis"
+                end
+       end
+
+       prod_of_done_primes *= p
+   end 
+    
+    sort!(mons, rev = true)
+    g = sum([s * m for (s, m) in zip(sol_vector, mons)])
+   return g
+end 
+        
+        
+function check_ansatz_part_2(ode::ODE)
+
+    @info "Solving with love and support!"
+    tim = @elapsed io_tocheck = russional_reconstruction(ode)
+    @info "time: $(tim) seconds"
+    println(Oscar.terms(io_tocheck))
+
+    @info "Solving without love and support :("
+    tim = @elapsed io_correct = first(values(find_ioequations(ode)))
+    io_correct *= (Nemo.leading_coefficient(io_correct)^(-1))
+    @info "time: $(tim) seconds"
+    println(Oscar.terms(io_correct))
+
+    R = parent(io_tocheck)
+    S = parent(io_correct)
+
+    # the variables of io_correct
+    n = ngens(R) 
+    ys = gens(S)[2 * (n - 1) + 2 : 3 * (n - 1) + 2]
+    @info "IO variables $(ys)"
+
+    phi = hom(R, S, ys)
+    quot, rem = divrem(phi(io_tocheck), io_correct)
+    # all(c -> c in Oscar.coefficients(io_tocheck), Oscar.coefficients(io_correct))
+    Oscar.coefficients(io_tocheck) .- Oscar.coefficients(io_correct)
+end
                     
 
 # ---------------------------------- #
