@@ -96,12 +96,6 @@ function solve_with_love_and_support(ode::ODE, p::Int; info = true)
     sort!(possible_supp, by = sum)
     prods = eval_at_support(possible_supp, pss)
                     
-    #prods = [prod([pss[k]^exp[k] for k in 1:length(pss)]) for exp in possible_supp]                
-
-    # Gleb: how about broadcast: pss .^ exp ?
-                
-                    
-
     ls = matrix([coeff(pr, j) for j in 0:(nterms - n - 1), pr in prods])
     info && @info "System created in $(time() - start_system_time)"
 
@@ -111,101 +105,25 @@ function solve_with_love_and_support(ode::ODE, p::Int; info = true)
     info && @info "Linear system solved in $system_soltime"
             dim = size(kernel(ls, side=:right))[2]
     info && @info "The dimension of the solution space is $(dim)"
-                    
+
+    start_constructing_time = time()
+
     R, _ = polynomial_ring(F, ["x1", ["x1^($i)" for i in 1:n]...])
             
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]    
     
     g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
        
-   
-    #mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
-    #g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])                  
-  
+    info && @info "The resulting polynomial computes in $(time() - start_constructing_time)"
+
     return g
 end
         
 
 # -------------------------------------------------------- #
 
+# -------- Faster evaluation of many monomials in power series -------- #
 
-# -------- Test function -------- #
-
-# test ansatz against IO enemy equation 
-function check_ansatz(ode::ODE, p::Int)
-
-    @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = solve_with_love_and_support(ode, p)
-    @info "time: $(tim) seconds"
-
-    @info "Solving without love and support :("
-    tim = @elapsed io_correct = first(values(find_ioequations(ode)))
-    io_correct = _reduce_mod_p(io_correct, p)
-    @info "time: $(tim) seconds"
-
-    R = parent(io_tocheck)
-    S = parent(io_correct)
-
-    # the variables of io_correct
-    n = ngens(R)
-    ys = gens(S)[2 * (n - 1) + 2 : 3 * (n - 1) + 2]
-    @info "IO variables $(ys)"
-
-    phi = hom(R, S, ys)
-
-    quot, rem = divrem(phi(io_tocheck), io_correct)
-    return iszero(rem) && iszero(total_degree(quot))
-end
-                    
-                    
-                    
-# Counting the integer points inside guessed polytopes and the ones from the theorem
-
-function bound_difference(d1::Int, d2::Int, p::Int) # counting for systems [d1, d2, 1:p]
-            for i in 1:p
-                @info "System | Num of the int points inside the polytope | Num of monomials in the min pol"
-                ode = rand_ode([d1,d2,i])
-                s = size(f_min_support(ode))[1]
-                l = length(solve_with_love_and_support(ode, Int(rand_bits_prime(ZZ, 32)), info = true))            
-                @info "[$d1,$d2,$i] | $s | $l"
-            end      
-end
-
-
-
-# ------------------------------- #
-
-
-# -------- Helper functions -------- #
-
-#Randomize general polynomial
-function rand_poly(deg, vars)
-    result = 0
-    degs = [collect(0:deg) for v in vars]
-
-    for m in IterTools.product(degs...)
-        if sum(m) <= deg
-            monom = rand(1:5)
-            for i in 1:length(vars)
-                monom *= vars[i]^m[i]
-            end
-            result += rand(1:1000) * monom
-        end
-    end
-
-    return result
-end
-
-function rand_ode(degs::Vector{Int})
-    n = length(degs)
-    R, vars = polynomial_ring(QQ, vcat(["x$i(t)" for i in 1:n], ["y(t)"]))
-    return StructuralIdentifiability.ODE{Ptype}(
-        Dict(vars[i] => rand_poly(degs[i], vars[1:n]) for i in 1:n),
-        Dict(vars[end] => vars[1]),
-        Ptype[]
-    )
-end
-                    
 #friendly helper
 function one_thing(e, vals, cacher)
     if !haskey(cacher, e)
@@ -221,7 +139,6 @@ function one_thing(e, vals, cacher)
     return cacher[e]
 end    
 
-# Want dictionary from supp to the evaluate value
 function eval_at_support(supp, vals)
     s = sort(supp, by = sum) 
     cacher = Dict(s[1] => one(parent(first(vals))))
