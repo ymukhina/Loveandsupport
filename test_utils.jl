@@ -9,10 +9,10 @@ const Ptype = QQMPolyRingElem
 # -------- Test function -------- #
 
 # test ansatz against IO enemy equation 
-function check_ansatz(ode::ODE, p::Int)
+function check_ansatz_modp(ode::ODE, p::Int)
 
     @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = solve_with_love_and_support(ode, p)
+    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, p)
     @info "time: $(tim) seconds"
 
     @info "Solving without love and support :("
@@ -33,6 +33,34 @@ function check_ansatz(ode::ODE, p::Int)
     quot, rem = divrem(phi(io_tocheck), io_correct)
     return iszero(rem) && iszero(total_degree(quot))
 end
+    
+function check_ansatz(ode::ODE)
+
+    @info "Solving with love and support!"
+    tim = @elapsed io_tocheck = eliminate_with_love_and_support(ode)
+    @info "time: $(tim) seconds"
+    println(Oscar.terms(io_tocheck))
+
+    @info "Solving without love and support :("
+    tim = @elapsed io_correct = first(values(find_ioequations(ode)))
+    io_correct *= (Nemo.leading_coefficient(io_correct)^(-1))
+    @info "time: $(tim) seconds"
+    println(Oscar.terms(io_correct))
+
+    R = parent(io_tocheck)
+    S = parent(io_correct)
+
+    # the variables of io_correct
+    n = ngens(R) 
+    ys = gens(S)[2 * (n - 1) + 2 : 3 * (n - 1) + 2]
+    @info "IO variables $(ys)"
+
+    phi = hom(R, S, ys)
+    quot, rem = divrem(phi(io_tocheck), io_correct)
+    # all(c -> c in Oscar.coefficients(io_tocheck), Oscar.coefficients(io_correct))
+    Oscar.coefficients(io_tocheck) .- Oscar.coefficients(io_correct)
+end
+                
                     
                     
                     
@@ -43,7 +71,7 @@ function bound_difference(d1::Int, d2::Int, p::Int) # counting for systems [d1, 
         @info "System | Num of the int points inside the polytope | Num of monomials in the min pol"
         ode = rand_ode([d1,d2,i])
         s = size(f_min_support(ode))[1]
-        l = length(solve_with_love_and_support(ode, Int(rand_bits_prime(ZZ, 32)), info = true))            
+        l = length(eliminate_with_love_and_support_modp(ode, Int(rand_bits_prime(ZZ, 32)), info = true))            
         @info "[$d1,$d2,$i] | $s | $l"
      end      
 end

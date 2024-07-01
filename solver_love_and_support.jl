@@ -63,7 +63,7 @@ end
 
 # -------- Compute f_min using an ansatz equation -------- #
 
-function solve_with_love_and_support(ode::ODE, p::Int; info = true)
+function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
     @assert is_probable_prime(p) "This is not a prime number, Yulia!"
 
     ode_mod_p = reduce_ode_mod_p(ode, p)
@@ -154,7 +154,7 @@ function qq_to_mod(a::QQFieldElem, p)
   return numerator(a) * invmod(denominator(a), ZZ(p))
 end
 
-function russional_reconstruction(ode::ODE)
+function eliminate_with_love_and_support(ode::ODE)
 
    @info "Code changed!"
    possible_supp = f_min_support(ode)
@@ -180,7 +180,7 @@ function russional_reconstruction(ode::ODE)
                 prim_cnt += 1
             l_succ = length(findall(is_stable))
        @info "Chose $prim_cnt th prime $p, $(l_succ) stable coefficients"
-       sol_mod_p = solve_with_love_and_support(ode, Int(p))
+       sol_mod_p = eliminate_with_love_and_support_modp(ode, Int(p))
        sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
 
        for (i, a) in enumerate(sol_vector_mod_p)
@@ -217,32 +217,6 @@ function russional_reconstruction(ode::ODE)
 end 
         
         
-function check_ansatz_part_2(ode::ODE)
-
-    @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = russional_reconstruction(ode)
-    @info "time: $(tim) seconds"
-    println(Oscar.terms(io_tocheck))
-
-    @info "Solving without love and support :("
-    tim = @elapsed io_correct = first(values(find_ioequations(ode)))
-    io_correct *= (Nemo.leading_coefficient(io_correct)^(-1))
-    @info "time: $(tim) seconds"
-    println(Oscar.terms(io_correct))
-
-    R = parent(io_tocheck)
-    S = parent(io_correct)
-
-    # the variables of io_correct
-    n = ngens(R) 
-    ys = gens(S)[2 * (n - 1) + 2 : 3 * (n - 1) + 2]
-    @info "IO variables $(ys)"
-
-    phi = hom(R, S, ys)
-    quot, rem = divrem(phi(io_tocheck), io_correct)
-    # all(c -> c in Oscar.coefficients(io_tocheck), Oscar.coefficients(io_correct))
-    Oscar.coefficients(io_tocheck) .- Oscar.coefficients(io_correct)
-end
-                    
+    
 
 # ---------------------------------- #
