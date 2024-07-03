@@ -62,6 +62,8 @@ end
 
 
 # -------- Compute f_min using an ansatz equation -------- #
+    
+
 
 function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
     @assert is_probable_prime(p) "This is not a prime number, Yulia!"
@@ -84,6 +86,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
     par = empty(ic)
     inp = empty(Dict(x[1] => [1]))
 
+        
     ps_soltime = @elapsed ps_sol = power_series_solution(ode_mod_p, par, ic, inp, nterms)
     info && @info "Power series solution computed in $ps_soltime"
 
@@ -92,11 +95,16 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
     for i in 1:n
         push!(pss, ps_diff(pss[end]))
     end
-        
+            
     sort!(possible_supp, by = sum)
+            
     prods = eval_at_support(possible_supp, pss)
-                    
-    ls = matrix([coeff(pr, j) for j in 0:(nterms - n - 1), pr in prods])
+     
+    ls = matrix_eff(prods, F, nterms - n)   
+           
+    #@time K = matrix_not_eff(prods, F, nterms - n - 1) 
+              
+            
     info && @info "System created in $(time() - start_system_time)"
 
     info && @info "linear system dims $(size(ls))"
@@ -123,6 +131,24 @@ end
 # -------------------------------------------------------- #
 
 # -------- Faster evaluation of many monomials in power series -------- #
+        
+function matrix_eff(vals, F, N)
+     S = matrix_space(F, N, N)
+        ls = one(S)
+             for i in 1:N
+                  for j in 1:N
+                    ls[j,i] = coeff(vals[i], j-1)
+                  end
+             end
+      return ls
+end
+        
+
+function matrix_not_eff(vals, F, N) 
+          ls = matrix([coeff(v, j) for j in 0:N, v in vals])
+        return ls
+end 
+        
 
 #friendly helper
 function one_thing(e, vals, cacher)
@@ -148,7 +174,7 @@ function eval_at_support(supp, vals)
     return return [cacher[s] for s in supp]
 end 
     
-    
+   
     
 function qq_to_mod(a::QQFieldElem, p)
   return numerator(a) * invmod(denominator(a), ZZ(p))
