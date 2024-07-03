@@ -3,6 +3,7 @@ using Nemo
 using StructuralIdentifiability
 using IterTools
 import StructuralIdentifiability: _reduce_mod_p, reduce_ode_mod_p, power_series_solution, ps_diff 
+using Random
 
 const Ptype = QQMPolyRingElem
 
@@ -78,15 +79,17 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
     possible_supp = f_min_support(ode)
                 l = length(possible_supp)
     info && @info "The size of the estimates support is $(length(possible_supp))"
+        
     nterms = length(possible_supp) + n
-
+        
     # random initial conditions
     ic = Dict([x[i] => rand(1:p - 1) for i in 1:n]...)
     # no parameters, no inputs
     par = empty(ic)
     inp = empty(Dict(x[1] => [1]))
-
-        
+           
+     
+      
     ps_soltime = @elapsed ps_sol = power_series_solution(ode_mod_p, par, ic, inp, nterms)
     info && @info "Power series solution computed in $ps_soltime"
 
@@ -99,8 +102,9 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
     sort!(possible_supp, by = sum)
             
     prods = eval_at_support(possible_supp, pss)
-     
-    ls = matrix_eff(prods, F, nterms - n)   
+                
+    ls = matrix_eff(prods, F, nterms - n) 
+            println(det(ls))
            
     #@time K = matrix_not_eff(prods, F, nterms - n - 1) 
               
@@ -134,7 +138,7 @@ end
         
 function matrix_eff(vals, F, N)
      S = matrix_space(F, N, N)
-        ls = one(S)
+        ls = zero(S)
              for i in 1:N
                   for j in 1:N
                     ls[j,i] = coeff(vals[i], j-1)
@@ -172,10 +176,20 @@ function eval_at_support(supp, vals)
             one_thing(e, vals, cacher)                 
         end
     return return [cacher[s] for s in supp]
-end 
+end
     
-   
     
+function eval_at_support_gen(supp, vals)
+    s = sort(supp, by = sum) 
+    cacher = Dict(s[1] => one(parent(first(vals))))
+        for e in s[2:end] #index
+            eval_at_support(e, vals, cacher)                 
+        end
+    return return [cacher[s] for s in supp]
+end    
+      
+    
+  
 function qq_to_mod(a::QQFieldElem, p)
   return numerator(a) * invmod(denominator(a), ZZ(p))
 end
@@ -243,6 +257,145 @@ function eliminate_with_love_and_support(ode::ODE)
 end 
         
         
+function interpolation_with_love_and_support_modp(ode::ODE, p::Int; info = true)
+    @assert is_probable_prime(p) "This is not a prime number, Yulia!"
+
+    ode_mod_p = reduce_ode_mod_p(ode, p)
+    x = sort(ode_mod_p.x_vars, rev = true)
+    n = length(x)
+    y = first(ode_mod_p.y_vars)
+    F = Nemo.Native.GF(p)
+      
+    dervs = var_derivatives(n, ode_mod_p, x[1])
+         
+            
+    # compute Newton polytope of f_min
+    possible_supp = f_min_support(ode)
+                l = length(possible_supp)
+    info && @info "The size of the estimates support is $(length(possible_supp))"
+   
+        
+    prods = Vector{}(undef,l)     
+    for i in 1:l
+        vec = Vector{Int}(undef,n+1)
+        rand!(vec,1:100)
+        evals = [derv(vec...) for derv in dervs]
+        prods[i] = eval_at_support(possible_supp, evals)
+    end
     
+    mat = matrix([prods[i][j] for i in 1:length(prods), j in 1:l])
+         
+    info && @info "linear system dims $(size(mat))"
+        
+    system_soltime = @elapsed ker = kernel(mat, side=:right)
+    info && @info "Linear system solved in $system_soltime"
+            dim = size(ker)[2]
+    info && @info "The dimension of the solution space is $(dim)"
+        
+
+    start_constructing_time = time()
+
+    R, _ = polynomial_ring(F, ["x1", ["x1^($i)" for i in 1:n]...])
+            
+    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]    
+    
+    g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
+    
+       
+    info && @info "The resulting polynomial computes in $(time() - start_constructing_time)"
+
+    return g   
+        
+   
+              
+end        
+        
+# -------- Helpers for interpolation Ansatz -------- #
+        
+function t_derivative_mon(mon, ode)
+            if total_degree(mon) == 0
+                return zero(mon)
+            end
+            
+            if total_degree(mon) == 1
+                for (var, eqn) in pairs(ode.x_equations)
+                    if var == mon
+                        return eqn
+                    end
+                end
+            end
+            
+            vrs = gens(parent(mon))
+                
+            for v in vrs
+                does_div, div = divides(mon, v)
+                if does_div
+                    return t_derivative(v, ode)*div + v*t_derivative(div, ode)
+                end
+            end
+end
+        
+function t_derivative_pol(pol, ode)
+            
+            result = zero(pol)
+            
+            for (coeff, mon) in zip(Nemo.coefficients(pol), Nemo.monomials(pol))
+                    result += coeff*t_derivative_mon(mon, ode)
+            end
+            
+            return result
+end
+      
+        
+function var_derivatives(ord, ode, var)
+          
+            result = [var, ode.x_equations[var]]
+            
+            for i in 2:ord
+                push!(result, t_derivative_pol(last(result), ode))
+            end
+                
+            return result
+end
+            
+function evaluate_exp_vector(vec, vals)
+                
+            return prod(vals .^ vec)
+end
 
 # ---------------------------------- #
+
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            

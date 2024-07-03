@@ -7,6 +7,34 @@ import StructuralIdentifiability: _reduce_mod_p, reduce_ode_mod_p, power_series_
 const Ptype = QQMPolyRingElem
 
 # -------- Test function -------- #
+# test interpolation_ansatz against IO enemy equation 
+function check_interpol_ansatz_modp(ode::ODE, p::Int)
+
+    @info "Solving with love and support!"
+    tim = @elapsed io_tocheck = interpolation_with_love_and_support_modp(ode, p)
+    @info "time: $(tim) seconds"
+
+    @info "Solving without love and support :("
+    tim = @elapsed io_correct = first(values(find_ioequations(ode)))
+    io_correct = _reduce_mod_p(io_correct, p)
+    @info "time: $(tim) seconds"
+
+    R = parent(io_tocheck)
+    S = parent(io_correct)
+
+    # the variables of io_correct
+    n = ngens(R)
+    ys = gens(S)[2 * (n - 1) + 2 : 3 * (n - 1) + 2]
+    @info "IO variables $(ys)"
+
+    phi = hom(R, S, ys)
+
+    quot, rem = divrem(phi(io_tocheck), io_correct)
+    return iszero(rem) && iszero(total_degree(quot))
+end
+    
+
+
 
 # test ansatz against IO enemy equation 
 function check_ansatz_modp(ode::ODE, p::Int)
