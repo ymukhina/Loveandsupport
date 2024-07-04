@@ -52,6 +52,7 @@ function f_min_support(ode::ODE; info = true)
                 ineq_lhs2[l + 1, i + l + 1] = i * (d1 - 1) + l * (D - 1) + 1
             end
         end
+        # Split maybe?
         ineq_rhs = [prod(Vector{Int}([d1 + (k - 1) * (D - 1) for k in 1:l])) * prod(Vector{Int}([i * (d1 - 1) + l * (D - 1) + 1 for i in 1:(n - l)]))
                     for l in 0:(n - 1)]
         A = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
@@ -103,6 +104,7 @@ function build_matrix_multipoint(F, ode, support; info = true)
     n = length(ode.x_vars)
     dervs = var_derivatives(n, ode, x)
     
+    # reorganize to compute efficiently and in-place
     prods = []
     for i in 1:length(support)
         vec = [rand(F) for _ in 1:(n + 1)]
@@ -110,8 +112,10 @@ function build_matrix_multipoint(F, ode, support; info = true)
         push!(prods, eval_at_support(support, evals))
     end
     
+    # efficient matrix creation
     mat = matrix([prods[i][j] for i in 1:length(prods), j in 1:length(support)])
- 
+
+    # print runtime
     return mat
 end
 
@@ -123,12 +127,14 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
     n = length(x)
     F = Nemo.Native.GF(p)
 
+    # take support as an argument and compute only once
     # compute Newton polytope of f_min
     possible_supp = f_min_support(ode)
                 l = length(possible_supp)
     info && @info "The size of the estimates support is $(length(possible_supp))"
     @info possible_supp
-    
+
+    # make an extra argument to choose a function
     #ls = build_matrix_power_series(F, ode_mod_p, possible_supp, info = info)
     ls = build_matrix_multipoint(F, ode_mod_p, possible_supp, info = info)
 
