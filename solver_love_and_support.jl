@@ -21,12 +21,12 @@ function f_min_support_bivariate(ode::ODE)
         b = [d1 * (d1 + d2 - 1), 0, 0, 0]
     else
         A = [1 d1 (2 * d1 - 1); 1 d2 (d1 + d2 - 1); -1 0 0; 0 -1 0; 0 0 -1]
-        b = [d1*(2*d1 - 1), d1*(d1 + d2 - 1), 0, 0, 0]
+        b = [d1 * (2 * d1 - 1), d1 * (d1 + d2 - 1), 0, 0, 0]
     end
     return collect(lattice_points(polyhedron(A, b)))
 end
 
-function f_min_support(ode::ODE; info = false)
+function f_min_support(ode::ODE; info = true)
     # I guess by sorting you try to ensure that the first x is the output, i am not sure
     # this would always work. You could just choose x such that the only y_equation is equal to x
     x = sort(ode.x_vars, rev = true)
@@ -36,6 +36,7 @@ function f_min_support(ode::ODE; info = false)
     d1 = total_degree(gs[1])
     @assert d1 > 0 "d1 = 0"
     D = maximum(total_degree, gs[2:end])
+    D = max(D, 0)
     info && @info "We have d1 = $d1 and D = $D"
 
     if d1 <= D
@@ -51,7 +52,7 @@ function f_min_support(ode::ODE; info = false)
                 ineq_lhs2[l + 1, i + l + 1] = i * (d1 - 1) + l * (D - 1) + 1
             end
         end
-        ineq_rhs = [prod([d1 + (k - 1) * (D - 1) for k in 1:l]) * prod([i * (d1 - 1) + l * (D - 1) + 1 for i in 1:(n - l)])
+        ineq_rhs = [prod(Vector{Int}([d1 + (k - 1) * (D - 1) for k in 1:l])) * prod(Vector{Int}([i * (d1 - 1) + l * (D - 1) + 1 for i in 1:(n - l)]))
                     for l in 0:(n - 1)]
         A = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
         b = vcat(ineq_rhs, zeros(QQ, n + 1))
@@ -64,33 +65,21 @@ end
 
 # -------- Compute f_min using an ansatz equation -------- #
     
+function build_matrix_power_series(F, ode, support; info = true)
 
-
-function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
-    @assert is_probable_prime(p) "This is not a prime number, Yulia!"
-
-    ode_mod_p = reduce_ode_mod_p(ode, p)
-    x = sort(ode_mod_p.x_vars, rev = true)
-    n = length(x)
-    y = first(ode_mod_p.y_vars)
-    F = Nemo.Native.GF(p)
-
-    # compute Newton polytope of f_min
-    possible_supp = f_min_support(ode)
-                l = length(possible_supp)
-    info && @info "The size of the estimates support is $(length(possible_supp))"
-        
-    nterms = length(possible_supp) + n
+    n = length(ode.x_vars)
+    y = first(ode.y_vars)
+    nterms = length(support) + n
         
     # random initial conditions
-    ic = Dict([x[i] => rand(1:p - 1) for i in 1:n]...)
+    ic = Dict([v => rand(F) for v in ode.x_vars]...)
     # no parameters, no inputs
     par = empty(ic)
-    inp = empty(Dict(x[1] => [1]))
+    inp = empty(Dict(first(ode.x_vars) => [one(F)]))
            
      
       
-    ps_soltime = @elapsed ps_sol = power_series_solution(ode_mod_p, par, ic, inp, nterms)
+    ps_soltime = @elapsed ps_sol = power_series_solution(ode, par, ic, inp, nterms)
     info && @info "Power series solution computed in $ps_soltime"
 
     start_system_time = time()
@@ -99,17 +88,49 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
         push!(pss, ps_diff(pss[end]))
     end
             
-    sort!(possible_supp, by = sum)
+    sort!(support, by = sum)
             
-    prods = eval_at_support(possible_supp, pss)
+    prods = eval_at_support(support, pss)
                 
     ls = matrix_eff(prods, F, nterms - n) 
-            println(det(ls))
            
-    #@time K = matrix_not_eff(prods, F, nterms - n - 1) 
-              
-            
     info && @info "System created in $(time() - start_system_time)"
+    return ls
+end
+
+function build_matrix_multipoint(F, ode, support; info = true)
+    x = first(sort(ode.x_vars, rev = true))
+    n = length(ode.x_vars)
+    dervs = var_derivatives(n, ode, x)
+    
+    prods = []
+    for i in 1:length(support)
+        vec = [rand(F) for _ in 1:(n + 1)]
+        evals = [derv(vec...) for derv in dervs]
+        push!(prods, eval_at_support(support, evals))
+    end
+    
+    mat = matrix([prods[i][j] for i in 1:length(prods), j in 1:length(support)])
+ 
+    return mat
+end
+
+function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
+    @assert is_probable_prime(p) "This is not a prime number, Yulia!"
+
+    ode_mod_p = reduce_ode_mod_p(ode, p)
+    x = sort(ode_mod_p.x_vars, rev = true)
+    n = length(x)
+    F = Nemo.Native.GF(p)
+
+    # compute Newton polytope of f_min
+    possible_supp = f_min_support(ode)
+                l = length(possible_supp)
+    info && @info "The size of the estimates support is $(length(possible_supp))"
+    @info possible_supp
+    
+    #ls = build_matrix_power_series(F, ode_mod_p, possible_supp, info = info)
+    ls = build_matrix_multipoint(F, ode_mod_p, possible_supp, info = info)
 
     info && @info "linear system dims $(size(ls))"
     
@@ -137,32 +158,25 @@ end
 # -------- Faster evaluation of many monomials in power series -------- #
         
 function matrix_eff(vals, F, N)
-     S = matrix_space(F, N, N)
-        ls = zero(S)
-             for i in 1:N
-                  for j in 1:N
-                    ls[j,i] = coeff(vals[i], j-1)
-                  end
-             end
-      return ls
+    S = matrix_space(F, N, N)
+    ls = zero(S)
+    for i in 1:N
+        for j in 1:N
+            ls[j,i] = coeff(vals[i], j-1)
+        end
+    end
+    return ls
 end
-        
-
-function matrix_not_eff(vals, F, N) 
-          ls = matrix([coeff(v, j) for j in 0:N, v in vals])
-        return ls
-end 
-        
 
 #friendly helper
 function one_thing(e, vals, cacher)
     if !haskey(cacher, e)
         for i in 1:length(e)
             if e[i] != 0 #[1,?]
-                    e_love = copy(e)
-                    e_love[i] -= 1
-                    res = vals[i] * one_thing(e_love, vals, cacher)
-                    cacher[e] = res
+                e_love = copy(e)
+                e_love[i] -= 1
+                res = vals[i] * one_thing(e_love, vals, cacher)
+                cacher[e] = res
             end
          end  
     end
@@ -172,22 +186,11 @@ end
 function eval_at_support(supp, vals)
     s = sort(supp, by = sum) 
     cacher = Dict(s[1] => one(parent(first(vals))))
-        for e in s[2:end] #index
-            one_thing(e, vals, cacher)                 
-        end
+    for e in s[2:end] #index
+        one_thing(e, vals, cacher)                 
+    end
     return return [cacher[s] for s in supp]
 end
-    
-    
-function eval_at_support_gen(supp, vals)
-    s = sort(supp, by = sum) 
-    cacher = Dict(s[1] => one(parent(first(vals))))
-        for e in s[2:end] #index
-            eval_at_support(e, vals, cacher)                 
-        end
-    return return [cacher[s] for s in supp]
-end    
-      
     
   
 function qq_to_mod(a::QQFieldElem, p)
@@ -195,8 +198,6 @@ function qq_to_mod(a::QQFieldElem, p)
 end
 
 function eliminate_with_love_and_support(ode::ODE)
-
-   @info "Code changed!"
    possible_supp = f_min_support(ode)
    l_supp = length(possible_supp)
    x = sort(ode.x_vars, rev = true)
@@ -211,14 +212,13 @@ function eliminate_with_love_and_support(ode::ODE)
    is_stable = falses(l_supp)
 
    prod_of_done_primes = one(ZZ)
-        
-        prim_cnt = 0
+   prim_cnt = 0
 
    while !all(is_stable)
 
        p = ZZ(Hecke.next_prime(rand(1:2^30)))
-                prim_cnt += 1
-            l_succ = length(findall(is_stable))
+       prim_cnt += 1
+       l_succ = length(findall(is_stable))
        @info "Chose $prim_cnt th prime $p, $(l_succ) stable coefficients"
        sol_mod_p = eliminate_with_love_and_support_modp(ode, Int(p))
        sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
@@ -256,111 +256,29 @@ function eliminate_with_love_and_support(ode::ODE)
    return g
 end 
         
-        
-function interpolation_with_love_and_support_modp(ode::ODE, p::Int; info = true)
-    @assert is_probable_prime(p) "This is not a prime number, Yulia!"
-
-    ode_mod_p = reduce_ode_mod_p(ode, p)
-    x = sort(ode_mod_p.x_vars, rev = true)
-    n = length(x)
-    y = first(ode_mod_p.y_vars)
-    F = Nemo.Native.GF(p)
-      
-    dervs = var_derivatives(n, ode_mod_p, x[1])
-         
-            
-    # compute Newton polytope of f_min
-    possible_supp = f_min_support(ode)
-                l = length(possible_supp)
-    info && @info "The size of the estimates support is $(length(possible_supp))"
-   
-        
-    prods = Vector{}(undef,l)     
-    for i in 1:l
-        vec = Vector{Int}(undef,n+1)
-        rand!(vec,1:100)
-        evals = [derv(vec...) for derv in dervs]
-        prods[i] = eval_at_support(possible_supp, evals)
-    end
-    
-    mat = matrix([prods[i][j] for i in 1:length(prods), j in 1:l])
-         
-    info && @info "linear system dims $(size(mat))"
-        
-    system_soltime = @elapsed ker = kernel(mat, side=:right)
-    info && @info "Linear system solved in $system_soltime"
-            dim = size(ker)[2]
-    info && @info "The dimension of the solution space is $(dim)"
-        
-
-    start_constructing_time = time()
-
-    R, _ = polynomial_ring(F, ["x1", ["x1^($i)" for i in 1:n]...])
-            
-    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]    
-    
-    g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
-    
-       
-    info && @info "The resulting polynomial computes in $(time() - start_constructing_time)"
-
-    return g   
-        
-   
-              
-end        
-        
 # -------- Helpers for interpolation Ansatz -------- #
         
-function t_derivative_mon(mon, ode)
-            if total_degree(mon) == 0
-                return zero(mon)
-            end
-            
-            if total_degree(mon) == 1
-                for (var, eqn) in pairs(ode.x_equations)
-                    if var == mon
-                        return eqn
-                    end
-                end
-            end
-            
-            vrs = gens(parent(mon))
-                
-            for v in vrs
-                does_div, div = divides(mon, v)
-                if does_div
-                    return t_derivative(v, ode)*div + v*t_derivative(div, ode)
-                end
-            end
-end
-        
-function t_derivative_pol(pol, ode)
-            
-            result = zero(pol)
-            
-            for (coeff, mon) in zip(Nemo.coefficients(pol), Nemo.monomials(pol))
-                    result += coeff*t_derivative_mon(mon, ode)
-            end
-            
-            return result
+function Lie_derivative(pol, ode)
+    result = zero(pol)
+    for v in vars(pol)
+        result += derivative(pol, v) * ode.x_equations[v]
+    end
+    return result
 end
       
         
 function var_derivatives(ord, ode, var)
-          
-            result = [var, ode.x_equations[var]]
+    result = [var]
             
-            for i in 2:ord
-                push!(result, t_derivative_pol(last(result), ode))
-            end
+    for i in 1:ord
+        push!(result, Lie_derivative(last(result), ode))
+    end
                 
-            return result
+    return result
 end
             
 function evaluate_exp_vector(vec, vals)
-                
-            return prod(vals .^ vec)
+    return prod(vals .^ vec)
 end
 
 # ---------------------------------- #
