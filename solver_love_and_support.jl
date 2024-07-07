@@ -102,21 +102,29 @@ end
 function build_matrix_multipoint(F, ode, support; info = true)
     x = first(sort(ode.x_vars, rev = true))
     n = length(ode.x_vars)
+    @info "computing derivatives"
     dervs = var_derivatives(n, ode, x)
+    @info "done"               
+    
+    sort!(support, by = sum)
     
     # reorganize to compute efficiently and in-place
-    prods = []
-    for i in 1:length(support)
+    lsup = length(support)
+    mat = Array{elem_type(F), 2}(undef, lsup, lsup)
+    for i in 1:lsup
         vec = [rand(F) for _ in 1:(n + 1)]
         evals = [derv(vec...) for derv in dervs]
-        push!(prods, eval_at_support(support, evals))
+        #prods = [prod(evals .^ exp) for exp in support]
+        #push!(prods, [prod(evals .^ exp) for exp in support])
+        #evsup = eval_at_support(support, evals)
+        for j in 1:lsup
+            mat[i, j] = prod([evals[k]^support[j][k] for k in 1:(n+1)])
+            #mat[i, j] = prod(evals .^ support[j])
+        end
     end
-    
-    # efficient matrix creation
-    mat = matrix([prods[i][j] for i in 1:length(prods), j in 1:length(support)])
 
     # print runtime
-    return mat
+    return matrix(mat)
 end
 
 function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
@@ -132,11 +140,12 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
     possible_supp = f_min_support(ode)
                 l = length(possible_supp)
     info && @info "The size of the estimates support is $(length(possible_supp))"
-    @info possible_supp
+    #@info possible_supp
 
     # make an extra argument to choose a function
-    #ls = build_matrix_power_series(F, ode_mod_p, possible_supp, info = info)
-    ls = build_matrix_multipoint(F, ode_mod_p, possible_supp, info = info)
+    tim1 = @elapsed ls = build_matrix_power_series(F, ode_mod_p, possible_supp, info = info)
+    tim2 = @elapsed ls = build_matrix_multipoint(F, ode_mod_p, possible_supp, info = info)
+    info && @info "ps method $(tim1), eval method $(tim2)"
 
     info && @info "linear system dims $(size(ls))"
     
@@ -195,7 +204,7 @@ function eval_at_support(supp, vals)
     for e in s[2:end] #index
         one_thing(e, vals, cacher)                 
     end
-    return return [cacher[s] for s in supp]
+    return [cacher[s] for s in supp]
 end
     
   
