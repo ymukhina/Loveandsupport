@@ -98,6 +98,43 @@ function build_matrix_power_series(F, ode, support; info = true)
     info && @info "System created in $(time() - start_system_time)"
     return ls
 end
+                    
+                    
+function check(pol, ode::ODE)
+                        
+    x = first(sort(ode.x_vars, rev = true))                     
+    n = length(ode.x_vars)
+    
+    dervs = var_derivatives(n, ode, x) 
+ 
+    res = pol(dervs...)                   
+                        
+    return iszero(res), res
+end
+                        
+
+function ShZ_check(pol, ode::ODE, target_prob)                         
+    x = first(sort(ode.x_vars, rev = true))                     
+    n = length(ode.x_vars)
+    
+    d1 = total_degree(ode.x_equations[x]) 
+    
+    gs = [ode.x_equations[xi] for xi in sort(ode.x_vars, rev = true)]
+                            
+    D = max(0, maximum(total_degree, gs[2:end]))
+                               
+    
+    dervs = var_derivatives(n, ode, x)
+    
+    deg_bnd = max(d1 + (n-1)*(d1-1), d1 + (n-1)*(D-1))*prod([d1 + (k-1)*(D-1) for k in 1:(n-1)])  
+    a = Int(ceil(1/(1-target_prob)))                        
+    vec = [rand(1:a*deg_bnd) for _ in 1:(n + 1)]
+     
+    evals = [derv(vec...) for derv in dervs]                        
+    res = pol(evals...)
+
+    return iszero(res)
+end                            
 
 function build_matrix_multipoint(F, ode, support; info = true)
     x = first(sort(ode.x_vars, rev = true))
