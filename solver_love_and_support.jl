@@ -107,7 +107,7 @@ function check(pol, ode::ODE)
     
     dervs = var_derivatives(n, ode, x) 
  
-    res = pol(dervs...)                   
+    res = pol(dervs...) 
                         
     return iszero(res), res
 end
@@ -122,13 +122,13 @@ function ShZ_check(pol, ode::ODE, target_prob)
     gs = [ode.x_equations[xi] for xi in sort(ode.x_vars, rev = true)]
                             
     D = max(0, maximum(total_degree, gs[2:end]))
-                               
-    
+                                
     dervs = var_derivatives(n, ode, x)
-    
-    deg_bnd = max(d1 + (n-1)*(d1-1), d1 + (n-1)*(D-1))*prod([d1 + (k-1)*(D-1) for k in 1:(n-1)])  
-    a = Int(ceil(1/(1-target_prob)))                        
-    vec = [rand(1:a*deg_bnd) for _ in 1:(n + 1)]
+   
+    # to compute degree bound using just pol
+    deg_bnd = max(d1 + (n - 1) * (d1 - 1), d1 + (n - 1) * (D - 1)) * prod([d1 + (k - 1) * (D - 1) for k in 1:(n - 1)])  
+    N = Int(ceil(deg_bnd / (1 - target_prob)))                        
+    vec = [rand(1:N) for _ in 1:(n + 1)]
      
     evals = [derv(vec...) for derv in dervs]                        
     res = pol(evals...)
@@ -146,23 +146,68 @@ function build_matrix_multipoint(F, ode, support; info = true)
     sort!(support, by = sum)
     
     # reorganize to compute efficiently and in-place
-    lsup = length(support)
+    lsup = length(support) # N
+    # TODO: create a Nemo matrix (with matrix_space) right away
     mat = Array{elem_type(F), 2}(undef, lsup, lsup)
-    for i in 1:lsup
+    for i in 1:lsup # N iterations
         vec = [rand(F) for _ in 1:(n + 1)]
         evals = [derv(vec...) for derv in dervs]
         #prods = [prod(evals .^ exp) for exp in support]
         #push!(prods, [prod(evals .^ exp) for exp in support])
         #evsup = eval_at_support(support, evals)
-        for j in 1:lsup
-            mat[i, j] = prod([evals[k]^support[j][k] for k in 1:(n+1)])
+        for j in 1:lsup # N iterations
+            mat[i, j] = prod([evals[k]^support[j][k] for k in 1:(n+1)]) # O(d) , where d - degree of the minimal polynomial
             #mat[i, j] = prod(evals .^ support[j])
         end
-    end
+    end # O(N^2 * d)
 
     # print runtime
     return matrix(mat)
 end
+
+function build_matrix_multipoint_fast(F, ode, support; info = true)
+    x = first(sort(ode.x_vars, rev = true))
+    n = length(ode.x_vars)
+    @info "computing derivatives"
+    dervs = var_derivatives(n, ode, x)
+    @info "done"               
+
+    support = [Vector{Int64}(p) for p in support]
+    sort!(support, by = sum)
+    
+    lsup = length(support)
+    S = matrix_space(F, lsup, lsup)
+    M = zero(S)
+    supp_to_index = Dict(s => i for (i, s) in enumerate(support))
+
+    # filling the columns corresponding to the derivatives
+    for i in 1:lsup
+        M[i, 1] = 1
+        vec = [rand(F) for _ in 1:(n + 1)]
+        evals = [derv(vec...) for derv in dervs]
+        for j in 1:(n + 1)
+            supp = [(k == j) ? 1 : 0 for k in 1:(n + 1)]
+            ind = supp_to_index[supp]
+            M[i, ind] = evals[j]
+        end
+    end
+
+    # filling the rest of the columns
+    for i in (n + 3):lsup
+        supp = support[i]
+        nonzero_ind = findfirst(x -> x > 0, supp)
+        var_ind = supp_to_index[[(k == nonzero_ind) ? 1 : 0 for k in 1:(n + 1)]]
+        pred_supp = copy(supp)
+        pred_supp[nonzero_ind] -= 1
+        pred_ind = supp_to_index[pred_supp]
+        for j in 1:lsup
+            M[j, i] = M[j, pred_ind] * M[j, var_ind]
+        end
+    end
+
+    return M
+end
+
 
 function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
     @assert is_probable_prime(p) "This is not a prime number, Yulia!"
@@ -181,7 +226,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
 
     # make an extra argument to choose a function
     tim1 = @elapsed ls = build_matrix_power_series(F, ode_mod_p, possible_supp, info = info)
-    tim2 = @elapsed ls = build_matrix_multipoint(F, ode_mod_p, possible_supp, info = info)
+    tim2 = @elapsed ls = build_matrix_multipoint_fast(F, ode_mod_p, possible_supp, info = info)
     info && @info "ps method $(tim1), eval method $(tim2)"
 
     info && @info "linear system dims $(size(ls))"
