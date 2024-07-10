@@ -41,11 +41,14 @@ function check_ansatz_modp(ode::ODE, p::Int)
 
     @info "Solving with love and support!"
     tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, p)
+    println(io_tocheck)
     @info "time: $(tim) seconds"
 
     @info "Solving without love and support :("
     tim = @elapsed io_correct = first(values(find_ioequations(ode)))
     io_correct = _reduce_mod_p(io_correct, p)
+    io_correct *= Oscar.leading_coefficient(io_correct)^(-1)
+    println(io_correct)
     @info "time: $(tim) seconds"
 
     R = parent(io_tocheck)
@@ -53,7 +56,12 @@ function check_ansatz_modp(ode::ODE, p::Int)
 
     # the variables of io_correct
     n = ngens(R)
-    ys = gens(S)[2 * (n - 1) + 2 : 3 * (n - 1) + 2]
+    println(gens(R))
+    println(gens(S))
+    # the worst thing in the known universe
+    svnames = (string).(S.S)
+    y_index = findfirst(vname -> vname == "y(t)_0", svnames)
+    ys = gens(S)[y_index:y_index+(n-1)]
     @info "IO variables $(ys)"
 
     phi = hom(R, S, ys)

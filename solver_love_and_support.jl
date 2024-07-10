@@ -26,19 +26,18 @@ function f_min_support_bivariate(ode::ODE)
     return collect(lattice_points(polyhedron(A, b)))
 end
 
-function f_min_support(ode::ODE; info = true)
+function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
     # I guess by sorting you try to ensure that the first x is the output, i am not sure
     # this would always work. You could just choose x such that the only y_equation is equal to x
     x = sort(ode.x_vars, rev = true)
     info && @info "Inferred order $x"
-    n = length(x)
+    n = jacobian_rank
     gs = [ode.x_equations[xi] for xi in x]
     d1 = total_degree(gs[1])
     @assert d1 > 0 "d1 = 0"
     D = maximum(total_degree, gs[2:end])
     D = max(D, 0)
     info && @info "We have d1 = $d1 and D = $D"
-
     if d1 <= D
         ineq_lhs = reshape([1, [d1 + (k - 1) * (D - 1) for k in 1:n]...], 1, n + 1)
         ineq_rhs = [prod([d1 + (k - 1) * (D - 1) for k in 1:n])]
@@ -164,18 +163,34 @@ function build_matrix_multipoint(F, ode, support; info = true)
     # print runtime
     return matrix(mat)
 end
+                                        
+# return the order of the largest upper left non vanishing minor of the jacobian matrix                          
+function jacobian_check(ode)
+    x = first(sort(ode.x_vars, rev = true))                                          
+    n = length(ode.x_vars)  
+                    
+    dervs = var_derivatives(n-1, ode, x)
+    J = jacobian_matrix(dervs)[1:n, :]
+    jdet = det(J)
+    res = n
+    while iszero(jdet)
+        res -= 1
+        jdet = det(J[1:res, 1:res])
+    end
+    return res                                                                                              
+end                                            
 
-function build_matrix_multipoint_fast(F, ode, support; info = true)
+function build_matrix_multipoint_fast(F, ode, jac, support; info = true)
     x = first(sort(ode.x_vars, rev = true))
     n = length(ode.x_vars)
     @info "computing derivatives"
-    dervs = var_derivatives(n, ode, x)
+    dervs = var_derivatives(jac, ode, x)                                                    
     @info "done"               
 
     support = [Vector{Int64}(p) for p in support]
     sort!(support, by = sum)
     
-    lsup = length(support)
+    lsup = length(support)                                                    
     S = matrix_space(F, lsup, lsup)
     M = zero(S)
     supp_to_index = Dict(s => i for (i, s) in enumerate(support))
@@ -183,20 +198,21 @@ function build_matrix_multipoint_fast(F, ode, support; info = true)
     # filling the columns corresponding to the derivatives
     for i in 1:lsup
         M[i, 1] = 1
-        vec = [rand(F) for _ in 1:(n + 1)]
+        vec = [rand(F) for _ in 1:(n + 1) ]                                                        
         evals = [derv(vec...) for derv in dervs]
-        for j in 1:(n + 1)
-            supp = [(k == j) ? 1 : 0 for k in 1:(n + 1)]
+                                                        
+        for j in 1:(jac + 1)
+            supp = [(k == j) ? 1 : 0 for k in 1: (jac + 1) ]
             ind = supp_to_index[supp]
             M[i, ind] = evals[j]
         end
     end
 
     # filling the rest of the columns
-    for i in (n + 3):lsup
+    for i in (jac + 3):lsup
         supp = support[i]
         nonzero_ind = findfirst(x -> x > 0, supp)
-        var_ind = supp_to_index[[(k == nonzero_ind) ? 1 : 0 for k in 1:(n + 1)]]
+        var_ind = supp_to_index[[(k == nonzero_ind) ? 1 : 0 for k in 1: (jac + 1) ]]
         pred_supp = copy(supp)
         pred_supp[nonzero_ind] -= 1
         pred_ind = supp_to_index[pred_supp]
@@ -204,7 +220,6 @@ function build_matrix_multipoint_fast(F, ode, support; info = true)
             M[j, i] = M[j, pred_ind] * M[j, var_ind]
         end
     end
-
     return M
 end
 
@@ -215,18 +230,21 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
     ode_mod_p = reduce_ode_mod_p(ode, p)
     x = sort(ode_mod_p.x_vars, rev = true)
     n = length(x)
-    F = Nemo.Native.GF(p)
+    F = Nemo.Native.GF(p)     
 
     # take support as an argument and compute only once
     # compute Newton polytope of f_min
-    possible_supp = f_min_support(ode)
-                l = length(possible_supp)
+    jac = jacobian_check(ode) 
+                                                                        
+    possible_supp = f_min_support(ode, jac)
+                                                              
+    l = length(possible_supp)
     info && @info "The size of the estimates support is $(length(possible_supp))"
     #@info possible_supp
 
     # make an extra argument to choose a function
     tim1 = @elapsed ls = build_matrix_power_series(F, ode_mod_p, possible_supp, info = info)
-    tim2 = @elapsed ls = build_matrix_multipoint_fast(F, ode_mod_p, possible_supp, info = info)
+    tim2 = @elapsed ls = build_matrix_multipoint_fast(F, ode_mod_p, jac, possible_supp, info = info)
     info && @info "ps method $(tim1), eval method $(tim2)"
 
     info && @info "linear system dims $(size(ls))"
@@ -238,7 +256,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
 
     start_constructing_time = time()
 
-    R, _ = polynomial_ring(F, ["x1", ["x1^($i)" for i in 1:n]...])
+    R, _ = polynomial_ring(F, ["x1", ["x1^($i)" for i in 1:jac]...])
             
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]    
     
@@ -293,8 +311,28 @@ end
 function qq_to_mod(a::QQFieldElem, p)
   return numerator(a) * invmod(denominator(a), ZZ(p))
 end
+                                                                                                                
+function final(ode::ODE) 
+                                                                                                                    
+       #a = rand(1:2^30-1)                                                                                                         
+       g, a = eliminate_with_love_and_support(ode, rand(1:2^30-1))
+                                                                                                               
+       
+           while ShZ_check(g, ode, 0.9) == false
+               println("lol")
+               println(eliminate_with_love_and_support(ode, a)[2])                                                                                                         
+               a = Hecke.next_prime(eliminate_with_love_and_support(ode, a)[2])
+               println(a)                                                                                                         
+               g = eliminate_with_love_and_support(ode, a)[1]  
+                                                                                                                         println(a)          
+           end
+               
+        println("kek")                                                                                    
+                                                                                                                          
+       return g                                                                                                             
+end                                                                                                                    
 
-function eliminate_with_love_and_support(ode::ODE)
+function eliminate_with_love_and_support(ode::ODE, a::Int)
    possible_supp = f_min_support(ode)
    l_supp = length(possible_supp)
    x = sort(ode.x_vars, rev = true)
@@ -311,10 +349,15 @@ function eliminate_with_love_and_support(ode::ODE)
    prod_of_done_primes = one(ZZ)
    prim_cnt = 0
 
+   #a = rand(1:2^30)                                                                                                                                                                                                                                   
    while !all(is_stable)
-
-       p = ZZ(Hecke.next_prime(rand(1:2^30)))
+                                                                                                                        
+       a = Hecke.next_prime(a)
+       p = ZZ(a)                                                                                                                                                                                                                                        
+       #p = ZZ(Hecke.next_prime(a))
+                                                                                                                        
        prim_cnt += 1
+                                                                                                                       
        l_succ = length(findall(is_stable))
        @info "Chose $prim_cnt th prime $p, $(l_succ) stable coefficients"
        sol_mod_p = eliminate_with_love_and_support_modp(ode, Int(p))
@@ -350,7 +393,7 @@ function eliminate_with_love_and_support(ode::ODE)
     
     sort!(mons, rev = true)
     g = sum([s * m for (s, m) in zip(sol_vector, mons)])
-   return g
+   return g, a
 end 
         
 # -------- Helpers for interpolation Ansatz -------- #
