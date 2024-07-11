@@ -117,24 +117,18 @@ function ShZ_check(pol, ode::ODE, target_prob)
     n = length(ode.x_vars)
     jac = jacobian_check(ode) 
     
-    d1 = total_degree(ode.x_equations[x]) 
+    deg_bnd = total_degree(pol)
+                            
+    N = Int(ceil(deg_bnd / (1 - target_prob)))                          
+                            
+    dervs = var_derivatives(jac, ode, x) 
     
-    gs = [ode.x_equations[xi] for xi in sort(ode.x_vars, rev = true)]
-                            
-    D = max(0, maximum(total_degree, gs[2:end]))
-                                
-    dervs = var_derivatives(jac, ode, x)
-                            
-    # to compute degree bound using just pol
-    deg_bnd = max(d1 + (jac - 1) * (d1 - 1), d1 + (jac - 1) * (D - 1)) * prod([d1 + (k - 1) * (D - 1) for k in 1:(jac - 1)])  
-    N = Int(ceil(deg_bnd / (1 - target_prob)))                        
     vec = [rand(1:N) for _ in 1:(n + 1)]
      
-    evals = [derv(vec...) for derv in dervs]
-                     
+    evals = [derv(vec...) for derv in dervs]                        
+                       
     res = pol(evals...)
                             
-
     return iszero(res)
 end                            
 
@@ -319,7 +313,7 @@ function final(ode::ODE)
                                                                                                                 
     g, a = eliminate_with_love_and_support(ode, rand(1:2^30-1))
                                                                                                                     
-         while ShZ_check(g-1, ode, 0.9) == false
+         while ShZ_check(g, ode, 0.9) == false
                a = Hecke.next_prime( eliminate_with_love_and_support(ode, a)[2] )
                g = eliminate_with_love_and_support(ode, a)[1] 
                println(a)                                                                                                     
