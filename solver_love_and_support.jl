@@ -115,6 +115,7 @@ end
 function ShZ_check(pol, ode::ODE, target_prob)                         
     x = first(sort(ode.x_vars, rev = true))                     
     n = length(ode.x_vars)
+    jac = jacobian_check(ode) 
     
     d1 = total_degree(ode.x_equations[x]) 
     
@@ -122,15 +123,17 @@ function ShZ_check(pol, ode::ODE, target_prob)
                             
     D = max(0, maximum(total_degree, gs[2:end]))
                                 
-    dervs = var_derivatives(n, ode, x)
-   
+    dervs = var_derivatives(jac, ode, x)
+                            
     # to compute degree bound using just pol
-    deg_bnd = max(d1 + (n - 1) * (d1 - 1), d1 + (n - 1) * (D - 1)) * prod([d1 + (k - 1) * (D - 1) for k in 1:(n - 1)])  
+    deg_bnd = max(d1 + (jac - 1) * (d1 - 1), d1 + (jac - 1) * (D - 1)) * prod([d1 + (k - 1) * (D - 1) for k in 1:(jac - 1)])  
     N = Int(ceil(deg_bnd / (1 - target_prob)))                        
     vec = [rand(1:N) for _ in 1:(n + 1)]
      
-    evals = [derv(vec...) for derv in dervs]                        
+    evals = [derv(vec...) for derv in dervs]
+                     
     res = pol(evals...)
+                            
 
     return iszero(res)
 end                            
@@ -313,31 +316,25 @@ function qq_to_mod(a::QQFieldElem, p)
 end
                                                                                                                 
 function final(ode::ODE) 
+                                                                                                                
+    g, a = eliminate_with_love_and_support(ode, rand(1:2^30-1))
                                                                                                                     
-       #a = rand(1:2^30-1)                                                                                                         
-       g, a = eliminate_with_love_and_support(ode, rand(1:2^30-1))
-                                                                                                               
-       
-           while ShZ_check(g, ode, 0.9) == false
-               println("lol")
-               println(eliminate_with_love_and_support(ode, a)[2])                                                                                                         
-               a = Hecke.next_prime(eliminate_with_love_and_support(ode, a)[2])
-               println(a)                                                                                                         
-               g = eliminate_with_love_and_support(ode, a)[1]  
-                                                                                                                         println(a)          
-           end
-               
-        println("kek")                                                                                    
-                                                                                                                          
-       return g                                                                                                             
+         while ShZ_check(g-1, ode, 0.9) == false
+               a = Hecke.next_prime( eliminate_with_love_and_support(ode, a)[2] )
+               g = eliminate_with_love_and_support(ode, a)[1] 
+               println(a)                                                                                                     
+         end
+                                                                                                                         
+return g                                                                                                             
 end                                                                                                                    
 
 function eliminate_with_love_and_support(ode::ODE, a::Int)
-   possible_supp = f_min_support(ode)
+   jac = jacobian_check(ode) 
+   possible_supp = f_min_support(ode, jac)
    l_supp = length(possible_supp)
-   x = sort(ode.x_vars, rev = true)
-   n = length(x)
-   R, _ = polynomial_ring(QQ, ["x1", ["x1^($i)" for i in 1:n]...]) 
+   #x = sort(ode.x_vars, rev = true)
+   #n = length(x)
+   R, _ = polynomial_ring(QQ, ["x1", ["x1^($i)" for i in 1:jac]...]) 
    sort!(possible_supp, by = exp -> prod(gens(R) .^ exp), rev = true)
    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
 
@@ -353,9 +350,7 @@ function eliminate_with_love_and_support(ode::ODE, a::Int)
    while !all(is_stable)
                                                                                                                         
        a = Hecke.next_prime(a)
-       p = ZZ(a)                                                                                                                                                                                                                                        
-       #p = ZZ(Hecke.next_prime(a))
-                                                                                                                        
+       p = ZZ(a)                                        
        prim_cnt += 1
                                                                                                                        
        l_succ = length(findall(is_stable))
