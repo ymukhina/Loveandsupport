@@ -101,15 +101,15 @@ function rand_poly(deg, vars)
     result = 0
     degs = [collect(0:deg) for v in vars]
 
-    for m in IterTools.product(degs...)
-        if sum(m) <= deg
-            monom = rand(1:5)
-            for i in 1:length(vars)
-                monom *= vars[i]^m[i]
+        for m in IterTools.product(degs...)
+            if sum(m) <= deg
+                monom = rand(1:5)
+                for i in 1:length(vars)
+                    monom *= vars[i]^m[i]
+                end
+               result += rand(1:1000) * monom
             end
-            result += rand(1:1000) * monom
         end
-    end
 
     return result
 end

@@ -105,34 +105,38 @@ function check(pol, ode::ODE)
     n = length(ode.x_vars)
     
     dervs = var_derivatives(n, ode, x) 
- 
+
     res = pol(dervs...) 
                         
-    return iszero(res), res
+   return iszero(res), res
 end
                         
 
-function ShZ_check(pol, ode::ODE, target_prob)                         
+function ShZ_check(pol, ode::ODE, target_prob) 
+                            
     x = first(sort(ode.x_vars, rev = true))                     
     n = length(ode.x_vars)
     jac = jacobian_check(ode) 
-    
-    deg_bnd = total_degree(pol)
-                            
-    N = Int(ceil(deg_bnd / (1 - target_prob)))                          
-                            
+                                                                             
     dervs = var_derivatives(jac, ode, x) 
+                                
+    mon = collect(Oscar.monomials(pol))
+    g = [total_degree(m(dervs...)) for m in mon]
+    deg_bnd = findmax(g)[1]                      
     
+    N = Int(ceil(deg_bnd / (1 - target_prob)))                               
+                                
     vec = [rand(1:N) for _ in 1:(n + 1)]
      
     evals = [derv(vec...) for derv in dervs]                        
                        
     res = pol(evals...)
                             
-    return iszero(res)
+   return iszero(res)
 end                            
 
 function build_matrix_multipoint(F, ode, support; info = true)
+                                
     x = first(sort(ode.x_vars, rev = true))
     n = length(ode.x_vars)
     @info "computing derivatives"
@@ -145,17 +149,17 @@ function build_matrix_multipoint(F, ode, support; info = true)
     lsup = length(support) # N
     # TODO: create a Nemo matrix (with matrix_space) right away
     mat = Array{elem_type(F), 2}(undef, lsup, lsup)
-    for i in 1:lsup # N iterations
-        vec = [rand(F) for _ in 1:(n + 1)]
-        evals = [derv(vec...) for derv in dervs]
-        #prods = [prod(evals .^ exp) for exp in support]
-        #push!(prods, [prod(evals .^ exp) for exp in support])
-        #evsup = eval_at_support(support, evals)
-        for j in 1:lsup # N iterations
-            mat[i, j] = prod([evals[k]^support[j][k] for k in 1:(n+1)]) # O(d) , where d - degree of the minimal polynomial
-            #mat[i, j] = prod(evals .^ support[j])
-        end
-    end # O(N^2 * d)
+        for i in 1:lsup # N iterations
+            vec = [rand(F) for _ in 1:(n + 1)]
+            evals = [derv(vec...) for derv in dervs]
+            #prods = [prod(evals .^ exp) for exp in support]
+            #push!(prods, [prod(evals .^ exp) for exp in support])
+            #evsup = eval_at_support(support, evals)
+                for j in 1:lsup # N iterations
+                    mat[i, j] = prod([evals[k]^support[j][k] for k in 1:(n+1)]) # O(d) , where d - degree of the minimal polynomial
+                    #mat[i, j] = prod(evals .^ support[j])
+                end
+        end # O(N^2 * d)
 
     # print runtime
     return matrix(mat)
@@ -163,17 +167,14 @@ end
                                         
 # return the order of the largest upper left non vanishing minor of the jacobian matrix                          
 function jacobian_check(ode)
+                                            
     x = first(sort(ode.x_vars, rev = true))                                          
     n = length(ode.x_vars)  
                     
     dervs = var_derivatives(n-1, ode, x)
     J = jacobian_matrix(dervs)[1:n, :]
-    jdet = det(J)
-    res = n
-    while iszero(jdet)
-        res -= 1
-        jdet = det(J[1:res, 1:res])
-    end
+    res = rank(J)                                        
+ 
     return res                                                                                              
 end                                            
 
@@ -193,35 +194,37 @@ function build_matrix_multipoint_fast(F, ode, jac, support; info = true)
     supp_to_index = Dict(s => i for (i, s) in enumerate(support))
 
     # filling the columns corresponding to the derivatives
-    for i in 1:lsup
-        M[i, 1] = 1
-        vec = [rand(F) for _ in 1:(n + 1) ]                                                        
-        evals = [derv(vec...) for derv in dervs]
+        for i in 1:lsup
+            M[i, 1] = 1
+            vec = [rand(F) for _ in 1:(n + 1) ]                                                        
+            evals = [derv(vec...) for derv in dervs]
                                                         
-        for j in 1:(jac + 1)
-            supp = [(k == j) ? 1 : 0 for k in 1: (jac + 1) ]
-            ind = supp_to_index[supp]
-            M[i, ind] = evals[j]
+                for j in 1:(jac + 1)
+                    supp = [(k == j) ? 1 : 0 for k in 1: (jac + 1) ]
+                    ind = supp_to_index[supp]
+                    M[i, ind] = evals[j]
+                end
         end
-    end
 
     # filling the rest of the columns
-    for i in (jac + 3):lsup
-        supp = support[i]
-        nonzero_ind = findfirst(x -> x > 0, supp)
-        var_ind = supp_to_index[[(k == nonzero_ind) ? 1 : 0 for k in 1: (jac + 1) ]]
-        pred_supp = copy(supp)
-        pred_supp[nonzero_ind] -= 1
-        pred_ind = supp_to_index[pred_supp]
-        for j in 1:lsup
-            M[j, i] = M[j, pred_ind] * M[j, var_ind]
+        for i in (jac + 3):lsup
+            supp = support[i]
+            nonzero_ind = findfirst(x -> x > 0, supp)
+            var_ind = supp_to_index[[(k == nonzero_ind) ? 1 : 0 for k in 1: (jac + 1) ]]
+            pred_supp = copy(supp)
+            pred_supp[nonzero_ind] -= 1
+            pred_ind = supp_to_index[pred_supp]
+                for j in 1:lsup
+                    M[j, i] = M[j, pred_ind] * M[j, var_ind]
+                end
         end
-    end
-    return M
+      
+  return M
 end
 
 
 function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
+                                                                    
     @assert is_probable_prime(p) "This is not a prime number, Yulia!"
 
     ode_mod_p = reduce_ode_mod_p(ode, p)
@@ -270,14 +273,16 @@ end
 # -------- Faster evaluation of many monomials in power series -------- #
         
 function matrix_eff(vals, F, N)
+                                                                        
     S = matrix_space(F, N, N)
     ls = zero(S)
-    for i in 1:N
-        for j in 1:N
-            ls[j,i] = coeff(vals[i], j-1)
+        for i in 1:N
+            for j in 1:N
+                ls[j,i] = coeff(vals[i], j-1)
+            end
         end
-    end
-    return ls
+                                                                                
+   return ls
 end
 
 #friendly helper
@@ -292,16 +297,16 @@ function one_thing(e, vals, cacher)
             end
          end  
     end
-    return cacher[e]
+  return cacher[e]
 end    
 
 function eval_at_support(supp, vals)
     s = sort(supp, by = sum) 
     cacher = Dict(s[1] => one(parent(first(vals))))
-    for e in s[2:end] #index
-        one_thing(e, vals, cacher)                 
-    end
-    return [cacher[s] for s in supp]
+            for e in s[2:end] #index
+                one_thing(e, vals, cacher)                 
+            end
+return [cacher[s] for s in supp]
 end
     
   
@@ -311,12 +316,13 @@ end
                                                                                                                 
 function final(ode::ODE) 
                                                                                                                 
-    g, a = eliminate_with_love_and_support(ode, rand(1:2^30-1))
+    g, a = eliminate_with_love_and_support(ode, 2^17-1)
                                                                                                                     
          while ShZ_check(g, ode, 0.9) == false
-               a = Hecke.next_prime( eliminate_with_love_and_support(ode, a)[2] )
-               g = eliminate_with_love_and_support(ode, a)[1] 
-               println(a)                                                                                                     
+                 println(total_degree(g-1))                                                                                       
+                 a = Hecke.next_prime(a)
+                 g, a = eliminate_with_love_and_support(ode, a)
+                 println(a) 
          end
                                                                                                                          
 return g                                                                                                             
@@ -339,8 +345,7 @@ function eliminate_with_love_and_support(ode::ODE, a::Int)
 
    prod_of_done_primes = one(ZZ)
    prim_cnt = 0
-
-   #a = rand(1:2^30)                                                                                                                                                                                                                                   
+                                                                                                                                                                                                                            
    while !all(is_stable)
                                                                                                                         
        a = Hecke.next_prime(a)
@@ -389,21 +394,21 @@ end
         
 function Lie_derivative(pol, ode)
     result = zero(pol)
-    for v in vars(pol)
-        result += derivative(pol, v) * ode.x_equations[v]
-    end
-    return result
+        for v in vars(pol)
+            result += derivative(pol, v) * ode.x_equations[v]
+        end
+   return result
 end
       
         
 function var_derivatives(ord, ode, var)
     result = [var]
             
-    for i in 1:ord
-        push!(result, Lie_derivative(last(result), ode))
-    end
+        for i in 1:ord
+            push!(result, Lie_derivative(last(result), ode))
+        end
                 
-    return result
+   return result
 end
             
 function evaluate_exp_vector(vec, vals)
