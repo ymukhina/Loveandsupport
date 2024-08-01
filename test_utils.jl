@@ -123,4 +123,3 @@ function rand_ode(degs::Vector{Int})
         Ptype[]
     )
 end
- 

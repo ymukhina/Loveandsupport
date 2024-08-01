@@ -182,11 +182,11 @@ function build_matrix_multipoint_fast(F, ode, jac, support; info = true)
     x = first(sort(ode.x_vars, rev = true))
     n = length(ode.x_vars)
     @info "computing derivatives"
-    dervs = var_derivatives(jac, ode, x)                                                    
+    dervs = var_derivatives(jac, ode, x)                                      
     @info "done"               
 
     support = [Vector{Int64}(p) for p in support]
-    sort!(support, by = sum)
+    # sort!(support, by = sum)
     
     lsup = length(support)                                                    
     S = matrix_space(F, lsup, lsup)
@@ -196,8 +196,9 @@ function build_matrix_multipoint_fast(F, ode, jac, support; info = true)
     # filling the columns corresponding to the derivatives
         for i in 1:lsup
             M[i, 1] = 1
-            vec = [rand(F) for _ in 1:(n + 1) ]                                                        
+            vec = [rand(F) for _ in 1:(n + 1) ]                                      
             evals = [derv(vec...) for derv in dervs]
+                                      
                                                         
                 for j in 1:(jac + 1)
                     supp = [(k == j) ? 1 : 0 for k in 1: (jac + 1) ]
@@ -237,15 +238,19 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
     jac = jacobian_check(ode) 
                                                                         
     possible_supp = f_min_support(ode, jac)
+                                                               
                                                               
     l = length(possible_supp)
     info && @info "The size of the estimates support is $(length(possible_supp))"
     #@info possible_supp
 
     # make an extra argument to choose a function
-    tim1 = @elapsed ls = build_matrix_power_series(F, ode_mod_p, possible_supp, info = info)
+    # tim1 = @elapsed ls = build_matrix_power_series(F, ode_mod_p, possible_supp, info = info)
+    sort!(possible_supp, by = sum)
     tim2 = @elapsed ls = build_matrix_multipoint_fast(F, ode_mod_p, jac, possible_supp, info = info)
-    info && @info "ps method $(tim1), eval method $(tim2)"
+    
+                                                                    
+    info && @info "eval method $(tim2)"
 
     info && @info "linear system dims $(size(ls))"
     
@@ -347,7 +352,7 @@ function eliminate_with_love_and_support(ode::ODE, a::Int)
    prim_cnt = 0
                                                                                                                                                                                                                             
    while !all(is_stable)
-                                                                                                                        
+       @label nxt_prm                                                                                                                 
        a = Hecke.next_prime(a)
        p = ZZ(a)                                        
        prim_cnt += 1
@@ -361,6 +366,10 @@ function eliminate_with_love_and_support(ode::ODE, a::Int)
            is_stable[i] && continue
 
            if found_cand[i]
+               if divides(denominator(sol_vector[i]), p)[1]
+                   @info "bad prime, restarting"
+                   @goto nxt_prm
+               end
                sol_i_mod_p = qq_to_mod(sol_vector[i], p)
                if sol_i_mod_p == sol_vector_mod_p[i]
                    is_stable[i] = true
@@ -415,39 +424,4 @@ function evaluate_exp_vector(vec, vals)
     return prod(vals .^ vec)
 end
 
-# ---------------------------------- #
-
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
+# ————————————————— #
