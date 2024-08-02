@@ -111,7 +111,15 @@ function check(pol, ode::ODE)
    return iszero(res), res
 end
                         
-
+function deg_after_substitution(pol, degs)
+           
+      mons = collect(Oscar.exponents(pol))                               
+      k = findmax([sum(mons[j] .* degs) for j in 1:length(mons)])[1]
+                                                                  
+      return(k)                          
+end                                
+                        
+                        
 function ShZ_check(pol, ode::ODE, target_prob) 
                             
     x = first(sort(ode.x_vars, rev = true))                     
@@ -119,10 +127,10 @@ function ShZ_check(pol, ode::ODE, target_prob)
     jac = jacobian_check(ode) 
                                                                              
     dervs = var_derivatives(jac, ode, x) 
+       
+    D = [total_degree(d) for d in dervs]                        
                                 
-    mon = collect(Oscar.monomials(pol))
-    g = [total_degree(m(dervs...)) for m in mon]
-    deg_bnd = findmax(g)[1]                      
+    deg_bnd = deg_after_substitution(pol, D)                                                                       
     
     N = Int(ceil(deg_bnd / (1 - target_prob)))                               
                                 
