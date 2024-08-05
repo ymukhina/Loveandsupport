@@ -111,12 +111,9 @@ function check(pol, ode::ODE)
    return iszero(res), res
 end
                         
-function deg_after_substitution(pol, degs)
-           
-      mons = collect(Oscar.exponents(pol))                               
-      k = findmax([sum(mons[j] .* degs) for j in 1:length(mons)])[1]
-                                                                  
-      return(k)                          
+function deg_after_substitution(pol, degs)       
+    mons = collect(Oscar.exponents(pol))                               
+    return findmax([sum(mons[j] .* degs) for j in 1:length(mons)])[1]
 end                                
                         
                         
@@ -327,18 +324,18 @@ function qq_to_mod(a::QQFieldElem, p)
   return numerator(a) * invmod(denominator(a), ZZ(p))
 end
                                                                                                                 
-function final(ode::ODE) 
+function eliminate(ode::ODE) 
                                                                                                                 
-    g, a = eliminate_with_love_and_support(ode, 2^17-1)
+    g, a = eliminate_with_love_and_support(ode, 2^17 - 1)
                                                                                                                     
-         while ShZ_check(g, ode, 0.9) == false
-                 println(total_degree(g-1))                                                                                       
-                 a = Hecke.next_prime(a)
-                 g, a = eliminate_with_love_and_support(ode, a)
-                 println(a) 
-         end
+    while ShZ_check(g, ode, 0.9) == false
+        println(total_degree(g - 1)) 
+        a = Hecke.next_prime(a)
+        g, a = eliminate_with_love_and_support(ode, a)
+        println(a) 
+    end
                                                                                                                          
-return g                                                                                                             
+    return g                                                                                                             
 end                                                                                                                    
 
 function eliminate_with_love_and_support(ode::ODE, a::Int)
