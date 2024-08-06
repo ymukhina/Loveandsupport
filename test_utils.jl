@@ -12,7 +12,7 @@ const Ptype = QQMPolyRingElem
 function check_ansatz_modp(ode::ODE, p::Int)
 
     @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, p)
+    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, p, false)
     println(io_tocheck)
     @info "time: $(tim) seconds"
 
@@ -46,14 +46,14 @@ function check_ansatz(ode::ODE)
 
     @info "Solving with love and support!"
     tim = @elapsed io_tocheck = eliminate_with_love_and_support(ode, rand(1:2^30))[1]
-            println(io_tocheck)
+           # println(io_tocheck)
     @info "time: $(tim) seconds"
    
 
     @info "Solving without love and support :("
     tim = @elapsed io_correct = first(values(find_ioequations(ode)))
     io_correct *= (Oscar.leading_coefficient(io_correct)^(-1))
-        println(io_correct)
+        #println(io_correct)
     @info "time: $(tim) seconds"
    
 

@@ -29,6 +29,6 @@ push!(
 
 @testset "Testing against the standard algorithms" begin
     for c in cases
-        @test check_ansatz(c, 2^30 + 3)
+        @test check_ansatz(c)
     end
 end
