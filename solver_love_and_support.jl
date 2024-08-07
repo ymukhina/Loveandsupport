@@ -318,8 +318,15 @@ end
 function qq_to_mod(a::QQFieldElem, p)
   return numerator(a) * invmod(denominator(a), ZZ(p))
 end
-                                                                                                                
-function eliminate(ode::ODE; prob = 0.99)
+
+"""
+    eliminate(ode, prob = 0.99)
+
+Computes the minimal polynomial for the output of a polynomial ODE model `ode` (without inputs and parameters)
+using evaluation-interpolation approach. The result is guaranteed to be correct with probability at least `prob`.
+If `prob` is set to 1, the result is guaranteed to be correct.
+"""
+function eliminate(ode::ODE, prob = 0.99)
                                                                             
     minimal_poly, starting_prime = eliminate_with_love_and_support(ode, 2^17 - 1)
                          
