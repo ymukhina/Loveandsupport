@@ -9,6 +9,7 @@ const Ptype = QQMPolyRingElem
 
 # -------- estimate support for f_min based on Theorems 1 and 2 -------- #
 
+# Gleb: do we still need this function?
 function f_min_support_bivariate(ode::ODE)
     @assert length(ode.x_vars) == 2 "system has more than two variables."
     x1, x2 = sort(ode.x_vars, rev = true)
@@ -64,7 +65,8 @@ end
 
 
 # -------- Compute f_min using an ansatz equation -------- #
-    
+
+# Gleb: remove?
 function build_matrix_power_series(F, ode, support; info = true)
 
     n = length(ode.x_vars)
@@ -99,47 +101,41 @@ function build_matrix_power_series(F, ode, support; info = true)
 end
                     
                     
-function check(pol, ode::ODE)
-                        
-    x = first(sort(ode.x_vars, rev = true))                     
-    n = length(ode.x_vars)
+function is_zero_mod_ode(pol, ode::ODE)
+   start_time = time()                    
+   x = first(sort(ode.x_vars, rev = true))                     
+   n = length(ode.x_vars)
     
-    dervs = var_derivatives(n, ode, x) 
+   dervs = var_derivatives(n, ode, x) 
 
-    res = pol(dervs...) 
-                        
-   return iszero(res), res
+   res = pol(dervs...) 
+                     
+   @info "Checked membership deterministaically in $(time() - start_time) seconds"
+   return iszero(res)
 end
                         
-function deg_after_substitution(pol, degs)       
-    mons = collect(Oscar.exponents(pol))                               
-    return findmax([sum(mons[j] .* degs) for j in 1:length(mons)])[1]
-end                                
-                        
-                        
-function ShZ_check(pol, ode::ODE, target_prob) 
-                            
+function is_zero_mod_ode_prob(pol, ode::ODE, prob = 0.99) 
+    start_time = time()
     x = first(sort(ode.x_vars, rev = true))                     
     n = length(ode.x_vars)
     jac = jacobian_check(ode) 
                                                                              
-    dervs = var_derivatives(jac, ode, x) 
-       
-    D = [total_degree(d) for d in dervs]                        
-                                
-    deg_bnd = deg_after_substitution(pol, D)                                                                       
+    lie_derivs = lie_derivatives(jac, ode, x) 
+    D = [total_degree(d) for d in lie_derivs]                        
+    deg_bnd = findmax([sum(m .* D) for m in Oscar.exponents(pol)])[1]
     
-    N = Int(ceil(deg_bnd / (1 - target_prob)))                               
+    N = Int(ceil(deg_bnd / (1 - prob)))           
                                 
     vec = [rand(1:N) for _ in 1:(n + 1)]
      
-    evals = [derv(vec...) for derv in dervs]                        
+    evals = [deriv(vec...) for deriv in lie_derivs]                        
                        
     res = pol(evals...)
-                            
+   @info "Checked membership probabilistically in $(time() - start_time) seconds"     
    return iszero(res)
 end                            
 
+# Gleb: remove?
 function build_matrix_multipoint(F, ode, support; info = true)
                                 
     x = first(sort(ode.x_vars, rev = true))
@@ -149,7 +145,7 @@ function build_matrix_multipoint(F, ode, support; info = true)
     @info "done"               
     
     sort!(support, by = sum)
-    
+
     # reorganize to compute efficiently and in-place
     lsup = length(support) # N
     # TODO: create a Nemo matrix (with matrix_space) right away
@@ -176,7 +172,7 @@ function jacobian_check(ode)
     x = first(sort(ode.x_vars, rev = true))                                          
     n = length(ode.x_vars)  
                     
-    dervs = var_derivatives(n-1, ode, x)
+    dervs = lie_derivatives(n - 1, ode, x)
     J = jacobian_matrix(dervs)[1:n, :]
     res = rank(J)                                        
  
@@ -187,7 +183,7 @@ function build_matrix_multipoint_fast(F, ode, jac, support; info = true)
     x = first(sort(ode.x_vars, rev = true))
     n = length(ode.x_vars)
     @info "computing derivatives"
-    dervs = var_derivatives(jac, ode, x)                                      
+    dervs = lie_derivatives(jac, ode, x)                                      
     @info "done"               
 
     support = [Vector{Int64}(p) for p in support]
@@ -249,8 +245,6 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
     info && @info "The size of the estimates support is $(length(possible_supp))"
     #@info possible_supp
 
-    # make an extra argument to choose a function
-    # tim1 = @elapsed ls = build_matrix_power_series(F, ode_mod_p, possible_supp, info = info)
     sort!(possible_supp, by = sum)
     tim2 = @elapsed ls = build_matrix_multipoint_fast(F, ode_mod_p, jac, possible_supp, info = info)
     
@@ -280,6 +274,7 @@ end
 
 # -------------------------------------------------------- #
 
+# Gleb: remove?
 # -------- Faster evaluation of many monomials in power series -------- #
         
 function matrix_eff(vals, F, N)
@@ -324,26 +319,26 @@ function qq_to_mod(a::QQFieldElem, p)
   return numerator(a) * invmod(denominator(a), ZZ(p))
 end
                                                                                                                 
-function eliminate(ode::ODE) 
-                                                                                                                
-    g, a = eliminate_with_love_and_support(ode, 2^17 - 1)
-                                                                                                                    
-    while ShZ_check(g, ode, 0.9) == false
-        println(total_degree(g - 1)) 
-        a = Hecke.next_prime(a)
-        g, a = eliminate_with_love_and_support(ode, a)
-        println(a) 
+function eliminate(ode::ODE; prob = 0.99)
+                                                                            
+    minimal_poly, starting_prime = eliminate_with_love_and_support(ode, 2^17 - 1)
+                         
+    # Gleb: todo - if prob = 1 is chose, the deterministic check should be used
+    while is_zero_mod_ode_prob(minimal_poly, ode, prob) == false
+        starting_prime = Hecke.next_prime(starting_prime)
+        minimal_poly, starting_prime = eliminate_with_love_and_support(ode, starting_prime)
     end
                                                                                                                          
-    return g                                                                                                             
+    return minimal_poly                                                                                    
 end                                                                                                                    
 
-function eliminate_with_love_and_support(ode::ODE, a::Int)
+# Gleb: What is a bit concerning in this code is that, for each prime, you find one of the minimal polynomials
+# (since it is defined up to a constant factor). So, if for different primes different factors were chosen, then
+# the reconstruction will fail for a strange reason. I think you should choose a "canonical minimal polynial", say with a fixed coefficient set to one
+function eliminate_with_love_and_support(ode::ODE, starting_prime::Int)
    jac = jacobian_check(ode) 
    possible_supp = f_min_support(ode, jac)
    l_supp = length(possible_supp)
-   #x = sort(ode.x_vars, rev = true)
-   #n = length(x)
    R, _ = polynomial_ring(QQ, ["x1", ["x1^($i)" for i in 1:jac]...]) 
    sort!(possible_supp, by = exp -> prod(gens(R) .^ exp), rev = true)
    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
@@ -355,11 +350,11 @@ function eliminate_with_love_and_support(ode::ODE, a::Int)
 
    prod_of_done_primes = one(ZZ)
    prim_cnt = 0
-                                                                                                                                                                                                                            
+   
    while !all(is_stable)
        @label nxt_prm                                                                                                                 
-       a = Hecke.next_prime(a)
-       p = ZZ(a)                                        
+       starting_prime = Hecke.next_prime(starting_prime)
+       p = ZZ(starting_prime)                                        
        prim_cnt += 1
                                                                                                                        
        l_succ = length(findall(is_stable))
@@ -391,6 +386,7 @@ function eliminate_with_love_and_support(ode::ODE, a::Int)
                    sol_vector[i] = r//s
                    found_cand[i] = true
                end
+               # Gleb: identation...
                 catch
                     @info "flint crisis"
                 end
@@ -399,14 +395,15 @@ function eliminate_with_love_and_support(ode::ODE, a::Int)
        prod_of_done_primes *= p
    end 
     
-    sort!(mons, rev = true)
-    g = sum([s * m for (s, m) in zip(sol_vector, mons)])
-   return g, a
+   sort!(mons, rev = true)
+   g = sum([s * m for (s, m) in zip(sol_vector, mons)])
+   return g, starting_prime
 end 
         
 # -------- Helpers for interpolation Ansatz -------- #
-        
-function Lie_derivative(pol, ode)
+# Gleb: not sure if the name of the section is accurate
+
+function lie_derivative(pol, ode)
     result = zero(pol)
         for v in vars(pol)
             result += derivative(pol, v) * ode.x_equations[v]
@@ -415,11 +412,11 @@ function Lie_derivative(pol, ode)
 end
       
         
-function var_derivatives(ord, ode, var)
+function lie_derivatives(ord, ode, var)
     result = [var]
             
         for i in 1:ord
-            push!(result, Lie_derivative(last(result), ode))
+            push!(result, lie_derivative(last(result), ode))
         end
                 
    return result
