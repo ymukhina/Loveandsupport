@@ -2,7 +2,7 @@ using Oscar
 using Nemo
 using StructuralIdentifiability
 using IterTools
-import StructuralIdentifiability: _reduce_mod_p, reduce_ode_mod_p, power_series_solution, ps_diff 
+import StructuralIdentifiability: _reduce_mod_p, reduce_ode_mod_p, power_series_solution, ps_diff, var_to_str, switch_ring 
 using Random
 
 const Ptype = QQMPolyRingElem
@@ -27,16 +27,11 @@ function f_min_support_bivariate(ode::ODE)
     return collect(lattice_points(polyhedron(A, b)))
 end
 
-function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
-    # I guess by sorting you try to ensure that the first x is the output, i am not sure
-    # this would always work. You could just choose x such that the only y_equation is equal to x
-    x = sort(ode.x_vars, rev = true)
-    info && @info "Inferred order $x"
+function f_min_support(ode::ODE, x, jacobian_rank::Int; info = true)
     n = jacobian_rank
-    gs = [ode.x_equations[xi] for xi in x]
-    d1 = total_degree(gs[1])
+    d1 = total_degree(ode.x_equations[x])
     @assert d1 > 0 "d1 = 0"
-    D = maximum(total_degree, gs[2:end])
+    D = maximum(total_degree, [eq for (v, eq) in ode.x_equations if v != x])
     D = max(D, 0)
     info && @info "We have d1 = $d1 and D = $D"
     if d1 <= D
@@ -101,9 +96,8 @@ function build_matrix_power_series(F, ode, support; info = true)
 end
                     
                     
-function is_zero_mod_ode(pol, ode::ODE)
+function is_zero_mod_ode(pol, ode::ODE, x)
    start_time = time()                    
-   x = first(sort(ode.x_vars, rev = true))                     
    n = length(ode.x_vars)
     
    dervs = var_derivatives(n, ode, x) 
@@ -114,17 +108,16 @@ function is_zero_mod_ode(pol, ode::ODE)
    return iszero(res)
 end
                         
-function is_zero_mod_ode_prob(pol, ode::ODE, prob = 0.99) 
+function is_zero_mod_ode_prob(pol, ode::ODE, x, prob = 0.99) 
     start_time = time()
-    x = first(sort(ode.x_vars, rev = true))                     
     n = length(ode.x_vars)
-    jac = jacobian_check(ode) 
+    ord = minpoly_order(ode, x) 
                                                                              
-    lie_derivs = lie_derivatives(jac, ode, x) 
+    lie_derivs = lie_derivatives(ord, ode, x) 
     D = [total_degree(d) for d in lie_derivs]                        
     deg_bnd = findmax([sum(m .* D) for m in Oscar.exponents(pol)])[1]
     
-    N = Int(ceil(deg_bnd / (1 - prob)))           
+    N = Int(1 + ceil(deg_bnd / (1 - prob)))           
                                 
     vec = [rand(1:N) for _ in 1:(n + 1)]
      
@@ -167,9 +160,7 @@ function build_matrix_multipoint(F, ode, support; info = true)
 end
                                         
 # return the order of the largest upper left non vanishing minor of the jacobian matrix                          
-function jacobian_check(ode)
-                                            
-    x = first(sort(ode.x_vars, rev = true))                                          
+function minpoly_order(ode, x)
     n = length(ode.x_vars)  
                     
     dervs = lie_derivatives(n - 1, ode, x)
@@ -179,8 +170,7 @@ function jacobian_check(ode)
     return res                                                                                              
 end                                            
 
-function build_matrix_multipoint_fast(F, ode, jac, support; info = true)
-    x = first(sort(ode.x_vars, rev = true))
+function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
     n = length(ode.x_vars)
     @info "computing derivatives"
     dervs = lie_derivatives(jac, ode, x)                                      
@@ -225,20 +215,20 @@ function build_matrix_multipoint_fast(F, ode, jac, support; info = true)
 end
 
 
-function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
+function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int; info = true)
                                                                     
     @assert is_probable_prime(p) "This is not a prime number, Yulia!"
 
     ode_mod_p = reduce_ode_mod_p(ode, p)
-    x = sort(ode_mod_p.x_vars, rev = true)
-    n = length(x)
+    x_mod_p = switch_ring(x, ode_mod_p.poly_ring)
+    n = length(ode_mod_p.x_vars)
     F = Nemo.Native.GF(p)     
 
     # take support as an argument and compute only once
     # compute Newton polytope of f_min
-    jac = jacobian_check(ode) 
+    ord = minpoly_order(ode, x) 
                                                                         
-    possible_supp = f_min_support(ode, jac)
+    possible_supp = f_min_support(ode, x, ord)
                                                                
                                                               
     l = length(possible_supp)
@@ -246,7 +236,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
     #@info possible_supp
 
     sort!(possible_supp, by = sum)
-    tim2 = @elapsed ls = build_matrix_multipoint_fast(F, ode_mod_p, jac, possible_supp, info = info)
+    tim2 = @elapsed ls = build_matrix_multipoint_fast(F, ode_mod_p, x_mod_p, ord, possible_supp, info = info)
     
                                                                     
     info && @info "eval method $(tim2)"
@@ -260,7 +250,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int; info = true)
 
     start_constructing_time = time()
 
-    R, _ = polynomial_ring(F, ["x1", ["x1^($i)" for i in 1:jac]...])
+    R, _ = polynomial_ring(F, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:ord]...])
             
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]    
     
@@ -320,20 +310,21 @@ function qq_to_mod(a::QQFieldElem, p)
 end
 
 """
-    eliminate(ode, prob = 0.99)
+    eliminate(ode, x, prob = 0.99)
 
-Computes the minimal polynomial for the output of a polynomial ODE model `ode` (without inputs and parameters)
+Computes the minimal polynomial for the `x` variable of a polynomial ODE model `ode` (without inputs and parameters)
 using evaluation-interpolation approach. The result is guaranteed to be correct with probability at least `prob`.
 If `prob` is set to 1, the result is guaranteed to be correct.
 """
-function eliminate(ode::ODE, prob = 0.99)
-                                                                            
-    minimal_poly, starting_prime = eliminate_with_love_and_support(ode, 2^17 - 1)
+function eliminate(ode::ODE, x, prob = 0.99)
+                                                                           
+    @assert x in ode.x_vars
+    minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, 2^17 - 1)
                          
     # Gleb: todo - if prob = 1 is chose, the deterministic check should be used
-    while is_zero_mod_ode_prob(minimal_poly, ode, prob) == false
+    while is_zero_mod_ode_prob(minimal_poly, ode, x, prob) == false
         starting_prime = Hecke.next_prime(starting_prime)
-        minimal_poly, starting_prime = eliminate_with_love_and_support(ode, starting_prime)
+        minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, starting_prime)
     end
                                                                                                                          
     return minimal_poly                                                                                    
@@ -342,11 +333,11 @@ end
 # Gleb: What is a bit concerning in this code is that, for each prime, you find one of the minimal polynomials
 # (since it is defined up to a constant factor). So, if for different primes different factors were chosen, then
 # the reconstruction will fail for a strange reason. I think you should choose a "canonical minimal polynial", say with a fixed coefficient set to one
-function eliminate_with_love_and_support(ode::ODE, starting_prime::Int)
+function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
    jac = jacobian_check(ode) 
-   possible_supp = f_min_support(ode, jac)
+   possible_supp = f_min_support(ode, x, jac)
    l_supp = length(possible_supp)
-   R, _ = polynomial_ring(QQ, ["x1", ["x1^($i)" for i in 1:jac]...]) 
+   R, _ = polynomial_ring(QQ, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:jac]...]) 
    sort!(possible_supp, by = exp -> prod(gens(R) .^ exp), rev = true)
    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
 
@@ -366,7 +357,7 @@ function eliminate_with_love_and_support(ode::ODE, starting_prime::Int)
                                                                                                                        
        l_succ = length(findall(is_stable))
        @info "Chose $prim_cnt th prime $p, $(l_succ) stable coefficients"
-       sol_mod_p = eliminate_with_love_and_support_modp(ode, Int(p))
+       sol_mod_p = eliminate_with_love_and_support_modp(ode, x, Int(p))
        sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
 
        for (i, a) in enumerate(sol_vector_mod_p)
@@ -420,13 +411,11 @@ end
       
         
 function lie_derivatives(ord, ode, var)
-    result = [var]
-            
-        for i in 1:ord
-            push!(result, lie_derivative(last(result), ode))
-        end
-                
-   return result
+    result = [var]            
+    for i in 1:ord
+        push!(result, lie_derivative(last(result), ode))
+    end
+    return result
 end
             
 function evaluate_exp_vector(vec, vals)
