@@ -27,6 +27,11 @@ push!(
     )
 )
 
+# Gleb: the following test cases should be added:
+#   * where the result of elimination is of lower order
+#   * where the coefficients are very large
+#   * the one which was a counter example for the power series approach
+
 @testset "Testing against the standard algorithms" begin
     for c in cases
         @test check_ansatz(c)

@@ -41,7 +41,8 @@ function check_ansatz_modp(ode::ODE, p::Int)
     quot, rem = divrem(phi(io_tocheck), io_correct)
     return iszero(rem) && iszero(total_degree(quot))
 end
-    
+
+# Gleb: there are no tests for the main function!
 function check_ansatz(ode::ODE)
 
     @info "Solving with love and support!"
