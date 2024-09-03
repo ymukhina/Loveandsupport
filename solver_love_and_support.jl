@@ -53,7 +53,7 @@ function f_min_support(ode::ODE, x, jacobian_rank::Int; info = true)
         A = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
         b = vcat(ineq_rhs, zeros(QQ, n + 1))
     end
-    return collect(lattice_points(polyhedron(A, b)))
+    return collect(lattice_points(Oscar.polyhedron(A, b)))
 end
 
 # ---------------------------------------------------------------------- #
@@ -100,7 +100,7 @@ function is_zero_mod_ode(pol, ode::ODE, x)
    start_time = time()                    
    n = length(ode.x_vars)
     
-   dervs = var_derivatives(n, ode, x) 
+   dervs = lie_derivatives(n, ode, x) 
 
    res = pol(dervs...) 
                      
@@ -134,7 +134,8 @@ function build_matrix_multipoint(F, ode, support; info = true)
     x = first(sort(ode.x_vars, rev = true))
     n = length(ode.x_vars)
     @info "computing derivatives"
-    dervs = var_derivatives(n, ode, x)
+    dervs = 
+                                s(n, ode, x)
     @info "done"               
     
     sort!(support, by = sum)
@@ -334,7 +335,7 @@ end
 # (since it is defined up to a constant factor). So, if for different primes different factors were chosen, then
 # the reconstruction will fail for a strange reason. I think you should choose a "canonical minimal polynial", say with a fixed coefficient set to one
 function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
-   jac = jacobian_check(ode) 
+   jac = minpoly_order(ode, x) 
    possible_supp = f_min_support(ode, x, jac)
    l_supp = length(possible_supp)
    R, _ = polynomial_ring(QQ, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:jac]...]) 

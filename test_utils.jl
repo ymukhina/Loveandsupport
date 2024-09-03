@@ -2,6 +2,8 @@ using Oscar
 using Nemo
 using StructuralIdentifiability
 using IterTools
+using Polyhedra
+import GLPK
 import StructuralIdentifiability: _reduce_mod_p, reduce_ode_mod_p, power_series_solution, ps_diff 
 
 const Ptype = QQMPolyRingElem
@@ -12,7 +14,7 @@ const Ptype = QQMPolyRingElem
 function check_ansatz_modp(ode::ODE, p::Int)
 
     @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, p, false)
+    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode,p, false)
     println(io_tocheck)
     @info "time: $(tim) seconds"
 
@@ -75,17 +77,55 @@ function check_ansatz(ode::ODE)
     return iszero(rem) && iszero(total_degree(quot))
 end
                 
+
+
+function test_table(p::Int)
+   generics = [
+    [2, 1, 1],
+    [2, 2, 2],
+    [2, 3, 3],
+    [2, 4, 4], 
+    [2, 5, 5],  
+    [3, 1, 1], 
+    [3, 2, 2],
+    [3, 3, 3],             
+] 
+      
+     generics2 = [
+    [4, 1, 1],
+    [4, 2, 2],           
+]        
+            
+      for i in 1:p 
+         for c in  generics2
+                
+         ode = rand_ode(c)  
+            x = first(sort(ode.x_vars, rev = true))            
+
+            s = size(f_min_support(ode, x, minpoly_order(ode, x)))[1]
+
+            ah = collect(exponent_vectors(eliminate_with_love_and_support_modp(ode, x, Int(rand_bits_prime(ZZ, 32)))))
+            L = length(lattice_points(convex_hull(ah)))
                     
+            per = L * 100 / s        
+
+            @info "System | Num of the int points inside the polytope | Num of monomials in the min pol | %"
+            @info "$c | $s | $L | $per " 
+                end
+                
+       end         
+end      
                     
                     
 # Counting the integer points inside guessed polytopes and the ones from the theorem
 
-function bound_difference(d1::Int, d2::Int, p::Int) # counting for systems [d1, d2, 1:p]
+function bound_difference(x, d1::Int, d2::Int, p::Int) # counting for systems [d1, d2, 1:p]
     for i in 1:p
         @info "System | Num of the int points inside the polytope | Num of monomials in the min pol"
         ode = rand_ode([d1,d2,i])
-        s = size(f_min_support(ode, jacobian_check(ode)))[1]
-        l = length(eliminate_with_love_and_support_modp(ode, Int(rand_bits_prime(ZZ, 32)), info = true))            
+        s = size(f_min_support(ode, x, minpoly_order(ode, x)))[1]
+                l=2
+        #l = length(eliminate_with_love_and_support_modp(ode, x, Int(rand_bits_prime(ZZ, 32)), info = true))            
         @info "[$d1,$d2,$i] | $s | $l"
      end      
 end
@@ -108,7 +148,7 @@ function rand_poly(deg, vars)
                 for i in 1:length(vars)
                     monom *= vars[i]^m[i]
                 end
-               result += rand(1:1000) * monom
+               result += rand(1:200) * monom
             end
         end
 
