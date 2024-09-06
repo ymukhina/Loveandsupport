@@ -92,16 +92,7 @@ Code for the Section 4.1 of the article.
 function test_table(p::Int)
             
    generics = [
-    [2, 1, 1],
-    [2, 2, 2],
-    [2, 3, 3],
-    [2, 4, 4], 
-    [2, 5, 5],  
-    [3, 1, 1], 
-    [3, 2, 2],
-    [3, 3, 3],
-    [1,2,2,2],
-    [2,1,1,1]            
+    [3, 2, 2],               
 ] 
             
       for i in 1:p 
