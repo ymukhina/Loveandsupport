@@ -174,7 +174,7 @@ end
 function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
     n = length(ode.x_vars)
     @info "computing derivatives"
-    dervs = lie_derivatives(jac, ode, x)                                      
+    dervs = lie_derivatives(jac, ode, x)
     @info "done"               
 
     support = [Vector{Int64}(p) for p in support]
