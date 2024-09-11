@@ -132,7 +132,46 @@ function test_table(p::Int)
                 
        end         
 end      
-                    
+
+               
+"""
+test_table_2()
+
+Computes the Newton polytope of the minimal polynomial for the systems in the Table 4.2
+        
+"""            
+            
+function test_table_2()   
+   
+    cases = []
+                
+    push!(
+    cases,
+    @ODEmodel(
+        x1'(t) = x1(t)^2 + x2(t)^2,
+        x2'(t) = x2(t) + x1(t),
+        y(t) = x1(t)
+    ),
+                
+    @ODEmodel(
+        x1'(t) = x1(t)^2 + x2(t)^2 + x3(t)^2,
+        x2'(t) = x2(t) + 1,
+        x3'(t) = x3(t) + 1,
+        y(t) = x1(t)
+    )            
+)           
+ 
+     for c in cases
+        ode = c
+        x = first(sort(ode.x_vars, rev = true))            
+        h = eliminate(ode, x, 0.99)
+        m = collect(exponent_vectors(h)) 
+        @info "Newton polytope for the system $c is $m"             
+     
+     end          
+end
+            
+            
                     
 # Counting the integer points inside guessed polytopes and the ones from the theorem
 
