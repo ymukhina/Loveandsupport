@@ -376,7 +376,7 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
                end
            end
 
-           crts[i] = crt(lift(ZZ, a), p, ZZ(crts[i]), prod_of_done_primes)
+           crts[i] = crt(Oscar.lift(ZZ, a), p, ZZ(crts[i]), prod_of_done_primes)
            
            try
                succ, r, s = rational_reconstruction(crts[i],
