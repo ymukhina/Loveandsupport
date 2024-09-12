@@ -86,54 +86,6 @@ function my_convex_hull(points)
     return Oscar.Polyhedron{QQFieldElem}(Polymake.polytope.Polytope{ptype}(; VERTICES = pts, LINEALITY_SPACE=lin))
 end
    
-            
-"""
-    test_table(p::Int)
-
-Computes the number of lattice points in the Newton polytope of the minimal polynomial according to the Theorem 1
-and compares result with the number of lattice points in the Newton polytope of the minimal polynomial obtained 
-by Algorithm 1 (eliminate_with_love_and_support_modp(ode, x, int)) for p times.
-        
-Code for the Section 4.1 of the article.        
-"""
-            
-                
-function test_table(p::Int)
-            
-   generics = [
-    [2, 1, 1],
-    [2, 2, 2],
-    [2, 3, 3],
-    [2, 4, 4],
-    [2, 5, 5], 
-    [3, 1, 1],                
-    [3, 2, 2],
-    [3, 3, 3],                
-    [1, 2, 2, 2],                 
-    [2, 1, 1, 1],
-] 
-            
-      for i in 1:p 
-         for c in  generics
-                
-             ode = rand_ode(c)  
-                x = first(sort(ode.x_vars, rev = true))            
-
-                s = size(f_min_support(ode, x, minpoly_order(ode, x)))[1]
-
-                ah = collect(exponent_vectors(eliminate_with_love_and_support_modp(ode, x, Int(rand_bits_prime(ZZ, 32)))))
-                L = length(lattice_points(my_convex_hull(ah)))
-                    
-                per = L * 100 / s        
-
-                @info "System | Num of the int points inside the polytope | Num of monomials in the min pol | %"
-                @info "$c | $s | $L | $per " 
-           end
-                
-       end         
-end      
-
-               
 """
 test_table_2()
 
