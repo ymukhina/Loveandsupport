@@ -172,18 +172,20 @@ function minpoly_order(ode, x)
 end                                            
 
 function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
+    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (jac + 1) ]                                           
     n = length(ode.x_vars)
     @info "computing derivatives"
     dervs = lie_derivatives(jac, ode, x)
-    @info "done"               
+    @info "done"
+                                                
 
-    support = [Vector{Int64}(p) for p in support]
-    # sort!(support, by = sum)
+    support2 = [Vector{Int64}(p) for p in support]
+    sort!(support2, by = sum)                                            
     
-    lsup = length(support)                                                    
+    lsup = length(support2)                                                    
     S = matrix_space(F, lsup, lsup)
     M = zero(S)
-    supp_to_index = Dict(s => i for (i, s) in enumerate(support))
+    supp_to_index = Dict(s => i for (i, s) in enumerate(support2))
 
     # filling the columns corresponding to the derivatives
         for i in 1:lsup
@@ -193,7 +195,7 @@ function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
                                       
                                                         
                 for j in 1:(jac + 1)
-                    supp = [(k == j) ? 1 : 0 for k in 1: (jac + 1) ]
+                    supp = var_to_sup(j) #[(k == j) ? 1 : 0 for k in 1: (jac + 1) ]
                     ind = supp_to_index[supp]
                     M[i, ind] = evals[j]
                 end
@@ -201,14 +203,24 @@ function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
 
     # filling the rest of the columns
         for i in (jac + 3):lsup
-            supp = support[i]
-            nonzero_ind = findfirst(x -> x > 0, supp)
-            var_ind = supp_to_index[[(k == nonzero_ind) ? 1 : 0 for k in 1: (jac + 1) ]]
-            pred_supp = copy(supp)
-            pred_supp[nonzero_ind] -= 1
-            pred_ind = supp_to_index[pred_supp]
+            supp = support2[i]
+            supp_divisor = copy(supp)
+            nonzero_ind = findfirst(x -> x > 0, supp_divisor)
+            supp_divisor[nonzero_ind] -= 1                                                 
+            multiplier = zeros(Int, jac + 1)
+            multiplier[nonzero_ind] += 1
+            while !haskey(supp_to_index, supp_divisor)
+                nonzero_ind = findfirst(x -> x > 0, supp_divisor)
+                supp_divisor[nonzero_ind] -= 1
+                multiplier[nonzero_ind] += 1
+            end                                                    
+            # var_ind = supp_to_index[[(k == nonzero_ind) ? 1 : 0 for k in 1: (jac + 1) ]]
+            # pred_supp[nonzero_ind] -= 1
+            # pred_ind = supp_to_index[pred_supp]
+            supp_div_ind = supp_to_index[supp_divisor]                                                    
                 for j in 1:lsup
-                    M[j, i] = M[j, pred_ind] * M[j, var_ind]
+                    multiplier_eval = prod([M[j, supp_to_index[var_to_sup(k)]] for k in 1:jac+1] .^ multiplier)
+                    M[j, i] = M[j, supp_div_ind] * multiplier_eval           
                 end
         end
       
@@ -216,7 +228,9 @@ function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
 end
 
 
-function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int; info = true)
+function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minpoly_order(ode, x),
+                                              possible_supp::Vector{PointVector{ZZRingElem}}=f_min_support(ode, x, ord); 
+                                              info = true)
                                                                     
     @assert is_probable_prime(p) "This is not a prime number, Yulia!"
 
@@ -227,18 +241,17 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int; info = true)
 
     # take support as an argument and compute only once
     # compute Newton polytope of f_min
-    ord = minpoly_order(ode, x) 
+    #ord = minpoly_order(ode, x) 
                                                                         
-    possible_supp = f_min_support(ode, x, ord)
+    #possible_supp = f_min_support(ode, x, ord)
                                                                
                                                               
     l = length(possible_supp)
     info && @info "The size of the estimates support is $(length(possible_supp))"
     #@info possible_supp
 
-    sort!(possible_supp, by = sum)
+    #sort!(possible_supp, by = sum)
     tim2 = @elapsed ls = build_matrix_multipoint_fast(F, ode_mod_p, x_mod_p, ord, possible_supp, info = info)
-    
                                                                     
     info && @info "eval method $(tim2)"
 
@@ -253,7 +266,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int; info = true)
 
     R, _ = polynomial_ring(F, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:ord]...])
             
-    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]    
+    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in sort(possible_supp, by = sum)]                                                                    
     
     g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
        
@@ -321,6 +334,7 @@ function eliminate(ode::ODE, x, prob = 0.99)
                                                                            
     @assert x in ode.x_vars
     minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, 2^17 - 1)
+                                                                                                                
                          
     # Gleb: todo - if prob = 1 is chose, the deterministic check should be used
     while is_zero_mod_ode_prob(minimal_poly, ode, x, prob) == false
@@ -337,9 +351,10 @@ end
 function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
    jac = minpoly_order(ode, x) 
    possible_supp = f_min_support(ode, x, jac)
+   current_supp = possible_supp
    l_supp = length(possible_supp)
    R, _ = polynomial_ring(QQ, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:jac]...]) 
-   sort!(possible_supp, by = exp -> prod(gens(R) .^ exp), rev = true)
+   # sort!(possible_supp, by = exp -> prod(gens(R) .^ exp), rev = true)
    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
 
    sol_vector = zeros(QQ, l_supp)
@@ -350,6 +365,7 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
    prod_of_done_primes = one(ZZ)
    prim_cnt = 0
    
+   is_first_prime = true
    while !all(is_stable)
        @label nxt_prm                                                                                                                 
        starting_prime = Hecke.next_prime(starting_prime)
@@ -358,14 +374,19 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
                                                                                                                        
        l_succ = length(findall(is_stable))
        @info "Chose $prim_cnt th prime $p, $(l_succ) stable coefficients"
-       sol_mod_p = eliminate_with_love_and_support_modp(ode, x, Int(p))
+       sol_mod_p = eliminate_with_love_and_support_modp(ode, x, Int(p), jac, current_supp)                                                                                                               
        sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
 
+       if is_first_prime         
+           current_supp = current_supp[findall(!iszero, sol_vector_mod_p)]
+           @info "updated support, new size is $(length(current_supp))"
+           is_first_prime = false                                             
+       end
        for (i, a) in enumerate(sol_vector_mod_p)
            is_stable[i] && continue
 
            if found_cand[i]
-               if divides(denominator(sol_vector[i]), p)[1]
+               if Oscar.divides(denominator(sol_vector[i]), p)[1]
                    @info "bad prime, restarting"
                    @goto nxt_prm
                end
@@ -394,7 +415,7 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
        prod_of_done_primes *= p
    end 
     
-   sort!(mons, rev = true)
+   # sort!(mons, rev = true)
    g = sum([s * m for (s, m) in zip(sol_vector, mons)])
    return g, starting_prime
 end 
