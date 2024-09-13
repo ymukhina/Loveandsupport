@@ -171,7 +171,9 @@ function minpoly_order(ode, x)
     return res                                                                                              
 end                                            
 
+# Gleb: write as a comment explicit assumptions in support (contains unit vectors and is sorted)
 function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
+    # Gleb: do not call the order `jac`
     var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (jac + 1) ]                                           
     n = length(ode.x_vars)
     @info "computing derivatives"
@@ -179,13 +181,14 @@ function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
     @info "done"
                                                 
 
-    support2 = [Vector{Int64}(p) for p in support]
-    sort!(support2, by = sum)                                            
+    support = [Vector{Int64}(p) for p in support]
+    # Gleb: NOT sort here
+    sort!(support, by = sum)                                            
     
-    lsup = length(support2)                                                    
+    lsup = length(support)                                                    
     S = matrix_space(F, lsup, lsup)
     M = zero(S)
-    supp_to_index = Dict(s => i for (i, s) in enumerate(support2))
+    supp_to_index = Dict(s => i for (i, s) in enumerate(support))
 
     # filling the columns corresponding to the derivatives
         for i in 1:lsup
@@ -203,7 +206,7 @@ function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
 
     # filling the rest of the columns
         for i in (jac + 3):lsup
-            supp = support2[i]
+            supp = support[i]
             supp_divisor = copy(supp)
             nonzero_ind = findfirst(x -> x > 0, supp_divisor)
             supp_divisor[nonzero_ind] -= 1                                                 
@@ -353,8 +356,8 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
    possible_supp = f_min_support(ode, x, jac)
    current_supp = possible_supp
    l_supp = length(possible_supp)
-   R, _ = polynomial_ring(QQ, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:jac]...]) 
-   # sort!(possible_supp, by = exp -> prod(gens(R) .^ exp), rev = true)
+   R, _ = polynomial_ring(QQ, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:jac]...])
+   sort!(current_supp, by = sum)
    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
 
    sol_vector = zeros(QQ, l_supp)
@@ -377,8 +380,12 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
        sol_mod_p = eliminate_with_love_and_support_modp(ode, x, Int(p), jac, current_supp)                                                                                                               
        sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
 
-       if is_first_prime         
-           current_supp = current_supp[findall(!iszero, sol_vector_mod_p)]
+       if is_first_prime
+           #Gleb: remove vcat, explicitly add unite vectors and sort again
+           current_supp = vcat(
+               current_supp[1:(jac + 2)],
+               current_supp[(jac + 3):end][findall(!iszero, sol_vector_mod_p[(jac + 3):end])]
+           )
            @info "updated support, new size is $(length(current_supp))"
            is_first_prime = false                                             
        end
@@ -400,8 +407,10 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
            crts[i] = crt(Oscar.lift(ZZ, a), p, ZZ(crts[i]), prod_of_done_primes)
            
            try
-               succ, r, s = rational_reconstruction(crts[i],
-                                                    ZZ(p*prod_of_done_primes))
+               succ, r, s = rational_reconstruction(
+                   crts[i],
+                   ZZ(p * prod_of_done_primes)
+               )
                if succ
                    sol_vector[i] = r//s
                    found_cand[i] = true
