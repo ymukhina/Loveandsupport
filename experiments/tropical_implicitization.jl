@@ -10,7 +10,7 @@ function rand_poly(deg, vars)
 
         for m in IterTools.product(degs...)
             if sum(m) <= deg
-                monom = rand(1:5)
+                monom = 1 
                 for i in 1:length(vars)
                     monom *= vars[i]^m[i]
                 end
@@ -21,34 +21,20 @@ function rand_poly(deg, vars)
     return result
 end
 
-#Find Newton polytope for polnomials f1, f2
-function diff_elimination_polytope_1(f1, f2)
-           f3 = derivative(f1,gens(parent(f1))[1]) * f1 + derivative(f1,gens(parent(f1))[2]) * f2
-           t_list = gens(parent(f1))       
-           newton_pols = [newton_polytope(f) for f in [t_list[1], f1, f3]]
-           cone_list, weight_list = get_tropical_cycle(newton_pols)
-           Delta = get_polytope_from_cycle(cone_list, weight_list)
-           return Delta
-end
-
-#Find Newton polytope for polnomials f1, f2, f3
-function diff_elimination_polytope_2(f1, f2, f3)
-                  f4 = derivative(f1,gens(parent(f1))[1]) * f1 + derivative(f1,gens(parent(f1))[2]) * f2 +  derivative(f1,gens(parent(f1))[3]) * f3
-                  f5 = derivative(f4,gens(parent(f1))[1]) * f1 + derivative(f4,gens(parent(f1))[2]) * f2 +  derivative(f4,gens(parent(f1))[3]) * f3
-           
-                  t_list = gens(parent(f1))        
-                  newton_pols = [newton_polytope(f) for f in [t_list[1], f1, f4, f5]]
-                  cone_list, weight_list = get_tropical_cycle(newton_pols)
-                  Delta = get_polytope_from_cycle(cone_list, weight_list)
-                  return Delta
-end
-
 function diff_elimination_polytope(polys)
-    if length(polys) == 2
-        return diff_elimination_polytope_1(polys...)
-    elseif length(polys) == 3
-        return diff_elimination_polytope_2(polys...)
+    vs = gens(parent(polys[1]))
+    poly_map = [vs[1], polys[1]]
+    for i in 1:(length(polys) - 1)
+        newp = 0
+        for (i, v) in enumerate(vs)
+            newp += derivative(poly_map[end], v) * polys[i]
+        end
+        push!(poly_map, newp)
     end
+    newton_pols = [newton_polytope(f) for f in poly_map]
+    cone_list, weight_list = get_tropical_cycle(newton_pols)
+    Delta = get_polytope_from_cycle(cone_list, weight_list)
+    return Delta
 end
 
 cases = []
@@ -76,6 +62,14 @@ push!(
     Dict(
         :name => "Generic system [2, 1, 1]",
         :polys => [rand_poly(2, [x1, x2, x3]), rand_poly(1, [x1, x2, x3]), rand_poly(1, [x1, x2, x3])],
+    )
+)
+
+push!(
+    cases,
+    Dict(
+        :name => "Generic system [3, 1, 1]",
+        :polys => [rand_poly(3, [x1, x2, x3]), rand_poly(1, [x1, x2, x3]), rand_poly(1, [x1, x2, x3])],
     )
 )
 
