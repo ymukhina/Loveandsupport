@@ -43,38 +43,48 @@ function diff_elimination_polytope_2(f1, f2, f3)
                   return Delta
 end
 
-#cases
-r1 = x2^2 + x1*x2 + x1^2 + 1
-r2 = x2 
+function diff_elimination_polytope(polys)
+    if length(polys) == 2
+        return diff_elimination_polytope_1(polys...)
+    elseif length(polys) == 3
+        return diff_elimination_polytope_2(polys...)
+    end
+end
 
-g1 = rand_poly(2, [x1, x2])
-g2 = rand_poly(1, [x1, x2])
+cases = []
 
-b1 = rand_poly(2, [x1, x2, x3])
-b2 = rand_poly(1, [x1, x2, x3])
-b3 = rand_poly(1, [x1, x2, x3])
+R, (x1, x2) = PolynomialRing(QQ, ["x1", "x2"])
+push!(
+    cases,
+    Dict(
+        :name => "Special system [2, 1]",
+        :polys => [x2^2 + x1 * x2 + x1^2 + 1, x2],
+    )
+)
+push!(
+    cases,
+    Dict(
+        :name => "Generic system [2, 1]",
+        :polys => [rand_poly(2, [x1, x2]), rand_poly(1, [x1, x2])],
+    )
+)
 
+R, (x1, x2, x3) = PolynomialRing(QQ, ["x1", "x2", "x3"])
 
+push!(
+    cases,
+    Dict(
+        :name => "Generic system [2, 1, 1]",
+        :polys => [rand_poly(2, [x1, x2, x3]), rand_poly(1, [x1, x2, x3]), rand_poly(1, [x1, x2, x3])],
+    )
+)
 
-R =  diff_elimination_polytope_1(r1, r2)
-vertices_1 = vertices(R) 
-newton_polytope_1 = convex_hull(vertices_1)
-np_size_1 = length(lattice_points(newton_polytope_1))
-np_equations_1 = facets(newton_polytope_1)    
-
-G =  diff_elimination_polytope_1(g1, g2)
-vertices_2 = vertices(G) 
-newton_polytope_2 = convex_hull(vertices_2)
-np_size_2 = length(lattice_points(newton_polytope_2))
-np_equations_2 = facets(newton_polytope_2)
-
-B =  diff_elimination_polytope_2(b1, b2, b3)
-vertices_3 = vertices(B)
-newton_polytope_3 = convex_hull(vertices_3)
-np_size_3 = length(lattice_points(newton_polytope_3))
-np_equations_3 = facets(newton_polytope_3)
-
-
-@info "Newton polytope for the spesial case of the system [2,1] $np_equations_1, size $np_size_1"    
-@info "Newton polytope for the system [2,1] $np_equations_2, size $np_size_2" 
-@info "Newton polytope for the system [2,1,1] $np_equations_3, size $np_size_3" 
+for c in cases
+    polys = c[:polys]
+    P =  diff_elimination_polytope(polys)
+    vs = vertices(P) 
+    newton_polytope = convex_hull(vs)
+    np_size = length(lattice_points(newton_polytope))
+    np_equations = facets(newton_polytope)    
+    @info "Newton polytope for $(c[:name]) is $np_equations, size $np_size"
+end
