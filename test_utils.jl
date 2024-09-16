@@ -16,16 +16,20 @@ const Ptype = QQMPolyRingElem
 # test ansatz against IO enemy equation 
 function check_ansatz_modp(ode::ODE, p::Int)
 
+    x = first(sort(ode.x_vars, rev = true))
+    ord = minpoly_order(ode, x) 
+    possible_supp = f_min_support(ode, x, ord)
+    
     @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode,p, false)
-    println(io_tocheck)
+    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, x, p, ord, possible_supp; info = false)
+    #println(io_tocheck)
     @info "time: $(tim) seconds"
 
     @info "Solving without love and support :("
     tim = @elapsed io_correct = first(values(find_ioequations(ode)))
     io_correct = _reduce_mod_p(io_correct, p)
     io_correct *= Oscar.leading_coefficient(io_correct)^(-1)
-    println(io_correct)
+    #println(io_correct)
     @info "time: $(tim) seconds"
 
     R = parent(io_tocheck)
@@ -49,9 +53,11 @@ end
 
 # Gleb: there are no tests for the main function!
 function check_ansatz(ode::ODE)
+        
+    x = first(sort(ode.x_vars, rev = true))    
 
     @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = eliminate_with_love_and_support(ode, rand(1:2^30))[1]
+    tim = @elapsed io_tocheck = eliminate_with_love_and_support(ode, x, rand(1:2^30))[1]
            # println(io_tocheck)
     @info "time: $(tim) seconds"
    

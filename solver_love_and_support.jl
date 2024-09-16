@@ -346,7 +346,15 @@ function eliminate(ode::ODE, x, prob = 0.99)
     end
                                                                                                                          
     return minimal_poly                                                                                    
-end                                                                                                                    
+end  
+                                                                                                                    
+function add_unit!(vars, jac)
+                                                                                                                        
+    for j in 1:(jac + 2)           
+        unit = [i == j ? one(ZZ) : zero(ZZ) for i in 1:(jac + 1)]
+        !(unit in vars) && push!(vars, point_vector(ZZ, unit))  
+    end                                                                                                                           
+end                                                                                                                        
 
 # Gleb: What is a bit concerning in this code is that, for each prime, you find one of the minimal polynomials
 # (since it is defined up to a constant factor). So, if for different primes different factors were chosen, then
@@ -381,11 +389,9 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
        sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
 
        if is_first_prime
-           #Gleb: remove vcat, explicitly add unite vectors and sort again
-           current_supp = vcat(
-               current_supp[1:(jac + 2)],
-               current_supp[(jac + 3):end][findall(!iszero, sol_vector_mod_p[(jac + 3):end])]
-           )
+           current_supp = current_supp[findall(!iszero, sol_vector_mod_p)]
+           add_unit!(current_supp, jac)
+           sort!(current_supp, by = sum)
            @info "updated support, new size is $(length(current_supp))"
            is_first_prime = false                                             
        end
