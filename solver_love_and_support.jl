@@ -217,14 +217,18 @@ function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
                 supp_divisor[nonzero_ind] -= 1
                 multiplier[nonzero_ind] += 1
             end                                                    
-            # var_ind = supp_to_index[[(k == nonzero_ind) ? 1 : 0 for k in 1: (jac + 1) ]]
-            # pred_supp[nonzero_ind] -= 1
-            # pred_ind = supp_to_index[pred_supp]
-            supp_div_ind = supp_to_index[supp_divisor]                                                    
-                for j in 1:lsup
-                    multiplier_eval = prod([M[j, supp_to_index[var_to_sup(k)]] for k in 1:jac+1] .^ multiplier)
-                    M[j, i] = M[j, supp_div_ind] * multiplier_eval           
+            
+            supp_div_ind = supp_to_index[supp_divisor]
+            mult_ind = get(supp_to_index, multiplier, -1)
+            for j in 1:lsup
+                if mult_ind == -1
+                    multiplier_eval = prod(M[j, 2:(jac + 2)] .^ multiplier)
+                else
+                    multiplier_eval = M[j, mult_ind]
                 end
+                M[j, i] = M[j, supp_div_ind] * multiplier_eval           
+            end
+            supp_to_index[supp] = i
         end
       
   return M
