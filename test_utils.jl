@@ -232,6 +232,8 @@ function rand_ode(degs::Vector{Int})
     n = length(degs)
     R, vars = polynomial_ring(QQ, vcat(["x$i(t)" for i in 1:n], ["y(t)"]))
     return StructuralIdentifiability.ODE{Ptype}(
+        vars[1:n],
+        [vars[end]],
         Dict(vars[i] => rand_poly(degs[i], vars[1:n]) for i in 1:n),
         Dict(vars[end] => vars[1]),
         Ptype[]
