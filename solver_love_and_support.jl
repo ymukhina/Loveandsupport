@@ -183,11 +183,12 @@ function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
 
     support = [Vector{Int64}(p) for p in support]
     # Gleb: NOT sort here
-    sort!(support, by = sum)                                            
+    sort!(support, by = s -> [sum(s), s[end:-1:1]...]) 
     
     lsup = length(support)                                                    
     S = matrix_space(F, lsup, lsup)
     M = zero(S)
+    @info support[1:10]
     supp_to_index = Dict(s => i for (i, s) in enumerate(support))
 
     # filling the columns corresponding to the derivatives
