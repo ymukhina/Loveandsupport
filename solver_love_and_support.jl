@@ -188,7 +188,6 @@ function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
     lsup = length(support)                                                    
     S = matrix_space(F, lsup, lsup)
     M = zero(S)
-    @info support[1:10]
     supp_to_index = Dict(s => i for (i, s) in enumerate(support))
 
     # filling the columns corresponding to the derivatives
@@ -370,7 +369,7 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
    current_supp = possible_supp
    l_supp = length(possible_supp)
    R, _ = polynomial_ring(QQ, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:jac]...])
-   sort!(current_supp, by = sum)
+   sort!(current_supp, by = s -> [sum(s), s[end:-1:1]...])
    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
 
    sol_vector = zeros(QQ, l_supp)
@@ -396,7 +395,7 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
        if is_first_prime
            current_supp = current_supp[findall(!iszero, sol_vector_mod_p)]
            add_unit!(current_supp, jac)
-           sort!(current_supp, by = sum)
+           sort!(current_supp, by = s -> [sum(s), s[end:-1:1]...])
            @info "updated support, new size is $(length(current_supp))"
            is_first_prime = false                                             
        end
