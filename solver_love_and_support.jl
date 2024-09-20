@@ -183,7 +183,7 @@ function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
 
     support = [Vector{Int64}(p) for p in support]
     # Gleb: NOT sort here
-    sort!(support, by = s -> [sum(s), s[end:-1:1]...]) 
+    #sort!(support, by = s -> [sum(s), s[end:-1:1]...]) 
     
     lsup = length(support)                                                    
     S = matrix_space(F, lsup, lsup)
@@ -228,7 +228,6 @@ function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
                 end
                 M[j, i] = M[j, supp_div_ind] * multiplier_eval           
             end
-            supp_to_index[supp] = i
         end
       
   return M
@@ -273,13 +272,13 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
 
     R, _ = polynomial_ring(F, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:ord]...])
             
-    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in sort(possible_supp, by = sum)]                                                                    
+    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
     
     g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
        
     info && @info "The resulting polynomial computes in $(time() - start_constructing_time)"
 
-    return g
+    return g * (1 // Oscar.leading_coefficient(g))
 end
         
 
@@ -366,10 +365,10 @@ end
 function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
    jac = minpoly_order(ode, x) 
    possible_supp = f_min_support(ode, x, jac)
-   current_supp = possible_supp
+   sort!(possible_supp, by = s -> [sum(s), s[end:-1:1]...])
+   current_supp = copy(possible_supp)
    l_supp = length(possible_supp)
    R, _ = polynomial_ring(QQ, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:jac]...])
-   sort!(current_supp, by = s -> [sum(s), s[end:-1:1]...])
    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
 
    sol_vector = zeros(QQ, l_supp)
