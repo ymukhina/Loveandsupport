@@ -24,7 +24,7 @@ function f_min_support_bivariate(ode::ODE)
         A = [1 d1 (2 * d1 - 1); 1 d2 (d1 + d2 - 1); -1 0 0; 0 -1 0; 0 0 -1]
         b = [d1 * (2 * d1 - 1), d1 * (d1 + d2 - 1), 0, 0, 0]
     end
-    return collect(lattice_points(polyhedron(A, b)))
+    return sort_gleb!(collect(lattice_points(polyhedron(A, b))))
 end
 
 function f_min_support(ode::ODE, x, jacobian_rank::Int; info = true)
@@ -53,7 +53,7 @@ function f_min_support(ode::ODE, x, jacobian_rank::Int; info = true)
         A = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
         b = vcat(ineq_rhs, zeros(QQ, n + 1))
     end
-    return collect(lattice_points(Oscar.polyhedron(A, b)))
+    return sort_gleb!(collect(lattice_points(Oscar.polyhedron(A, b))))
 end
 
 # ---------------------------------------------------------------------- #
@@ -128,38 +128,6 @@ function is_zero_mod_ode_prob(pol, ode::ODE, x, prob = 0.99)
    return iszero(res)
 end                            
 
-# Gleb: remove?
-function build_matrix_multipoint(F, ode, support; info = true)
-                                
-    x = first(sort(ode.x_vars, rev = true))
-    n = length(ode.x_vars)
-    @info "computing derivatives"
-    dervs = 
-                                s(n, ode, x)
-    @info "done"               
-    
-    sort!(support, by = sum)
-
-    # reorganize to compute efficiently and in-place
-    lsup = length(support) # N
-    # TODO: create a Nemo matrix (with matrix_space) right away
-    mat = Array{elem_type(F), 2}(undef, lsup, lsup)
-        for i in 1:lsup # N iterations
-            vec = [rand(F) for _ in 1:(n + 1)]
-            evals = [derv(vec...) for derv in dervs]
-            #prods = [prod(evals .^ exp) for exp in support]
-            #push!(prods, [prod(evals .^ exp) for exp in support])
-            #evsup = eval_at_support(support, evals)
-                for j in 1:lsup # N iterations
-                    mat[i, j] = prod([evals[k]^support[j][k] for k in 1:(n+1)]) # O(d) , where d - degree of the minimal polynomial
-                    #mat[i, j] = prod(evals .^ support[j])
-                end
-        end # O(N^2 * d)
-
-    # print runtime
-    return matrix(mat)
-end
-                                        
 # return the order of the largest upper left non vanishing minor of the jacobian matrix                          
 function minpoly_order(ode, x)
     n = length(ode.x_vars)  
@@ -171,7 +139,7 @@ function minpoly_order(ode, x)
     return res                                                                                              
 end                                            
 
-# Gleb: write as a comment explicit assumptions in support (contains unit vectors and is sorted)
+# This function assumes that support contains the unit vectors and is sorted by `sort_gleb!`
 function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
     # Gleb: do not call the order `jac`
     var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (jac + 1) ]                                           
@@ -179,11 +147,8 @@ function build_matrix_multipoint_fast(F, ode, x, jac, support; info = true)
     @info "computing derivatives"
     dervs = lie_derivatives(jac, ode, x)
     @info "done"
-                                                
 
     support = [Vector{Int64}(p) for p in support]
-    # Gleb: NOT sort here
-    #sort!(support, by = s -> [sum(s), s[end:-1:1]...]) 
     
     lsup = length(support)                                                    
     S = matrix_space(F, lsup, lsup)
@@ -245,13 +210,6 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
     n = length(ode_mod_p.x_vars)
     F = Nemo.Native.GF(p)     
 
-    # take support as an argument and compute only once
-    # compute Newton polytope of f_min
-    #ord = minpoly_order(ode, x) 
-                                                                        
-    #possible_supp = f_min_support(ode, x, ord)
-                                                               
-                                                              
     l = length(possible_supp)
     info && @info "The size of the estimates support is $(length(possible_supp))"
     #@info possible_supp
@@ -351,12 +309,15 @@ function eliminate(ode::ODE, x, prob = 0.99)
     return minimal_poly                                                                                    
 end  
                                                                                                                     
-function add_unit!(vars, jac)
+function add_unit!(supp, jac)
                                                                                                                         
+    l_supp = length(supp)
     for j in 1:(jac + 2)           
         unit = [i == j ? one(ZZ) : zero(ZZ) for i in 1:(jac + 1)]
-        !(unit in vars) && push!(vars, point_vector(ZZ, unit))  
+        !(unit in supp) && push!(supp, point_vector(ZZ, unit))  
     end                                                                                                                           
+    l_supp < length(supp) && sort_gleb!(supp)
+    return supp
 end                                                                                                                        
 
 # Gleb: What is a bit concerning in this code is that, for each prime, you find one of the minimal polynomials
@@ -365,19 +326,16 @@ end
 function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
    jac = minpoly_order(ode, x) 
    possible_supp = f_min_support(ode, x, jac)
-   sort!(possible_supp, by = s -> [sum(s), s[end:-1:1]...])
-   current_supp = copy(possible_supp)
    l_supp = length(possible_supp)
    R, _ = polynomial_ring(QQ, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:jac]...])
-   mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
+
+   prod_of_done_primes = one(ZZ)
+   prim_cnt = 0
 
    sol_vector = zeros(QQ, l_supp)
    crts = zeros(ZZ, l_supp)
    found_cand = falses(l_supp)
    is_stable = falses(l_supp)
-
-   prod_of_done_primes = one(ZZ)
-   prim_cnt = 0
    
    is_first_prime = true
    while !all(is_stable)
@@ -385,19 +343,23 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
        starting_prime = Hecke.next_prime(starting_prime)
        p = ZZ(starting_prime)                                        
        prim_cnt += 1
-                                                                                                                       
-       l_succ = length(findall(is_stable))
-       @info "Chose $prim_cnt th prime $p, $(l_succ) stable coefficients"
-       sol_mod_p = eliminate_with_love_and_support_modp(ode, x, Int(p), jac, current_supp)                                                                                                               
-       sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
+       
+       @info "Chose $prim_cnt th prime $p, $(length(findall(is_stable))) stable coefficients"
+       sol_mod_p = eliminate_with_love_and_support_modp(ode, x, Int(p), jac, possible_supp)  
 
        if is_first_prime
-           current_supp = current_supp[findall(!iszero, sol_vector_mod_p)]
-           add_unit!(current_supp, jac)
-           sort!(current_supp, by = s -> [sum(s), s[end:-1:1]...])
-           @info "updated support, new size is $(length(current_supp))"
+           filter!(exp -> !iszero(coeff(sol_mod_p, Vector{Int}(exp))), possible_supp)
+           add_unit!(possible_supp, jac)
+           l_supp = length(possible_supp)
+           resize!(sol_vector, l_supp)
+           resize!(crts, l_supp)
+           resize!(found_cand, l_supp)
+           resize!(is_stable, l_supp)
+           @info "updated support, new size is $(length(possible_supp))"
            is_first_prime = false                                             
        end
+    
+       sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
        for (i, a) in enumerate(sol_vector_mod_p)
            is_stable[i] && continue
 
@@ -433,7 +395,7 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
        prod_of_done_primes *= p
    end 
     
-   # sort!(mons, rev = true)
+   mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
    g = sum([s * m for (s, m) in zip(sol_vector, mons)])
    return g, starting_prime
 end 
@@ -460,6 +422,10 @@ end
             
 function evaluate_exp_vector(vec, vals)
     return prod(vals .^ vec)
+end
+
+function sort_gleb!(exp_vectors::Vector{PointVector{ZZRingElem}})
+    sort!(exp_vectors, by = s -> [sum(s), s[end:-1:1]...])
 end
 
 # ————————————————— #
