@@ -76,75 +76,75 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
 end
 
 function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
-   minpoly_ord = minpoly_order(ode, x) 
-   possible_supp = f_min_support(ode, x, minpoly_ord)
-   l_supp = length(possible_supp)
-   R, _ = polynomial_ring(QQ, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:minpoly_ord]...])
-
-   prod_of_done_primes = one(ZZ)
-   prim_cnt = 0
-
-   sol_vector = zeros(QQ, l_supp)
-   crts = zeros(ZZ, l_supp)
-   found_cand = falses(l_supp)
-   is_stable = falses(l_supp)
-   
-   is_first_prime = true
-   while !all(is_stable)
-       @label nxt_prm                                                                                                                 
-       starting_prime = Hecke.next_prime(starting_prime)
-       p = ZZ(starting_prime)                                        
-       prim_cnt += 1
-       
-       @info "Chose $prim_cnt th prime $p, $(length(findall(is_stable))) stable coefficients"
-       sol_mod_p = eliminate_with_love_and_support_modp(ode, x, Int(p), minpoly_ord, possible_supp)  
-
-       if is_first_prime
-           filter!(exp -> !iszero(coeff(sol_mod_p, Vector{Int}(exp))), possible_supp)
-           add_unit!(possible_supp, minpoly_ord)
-           l_supp = length(possible_supp)
-           resize!(sol_vector, l_supp)
-           resize!(crts, l_supp)
-           resize!(found_cand, l_supp)
-           resize!(is_stable, l_supp)
-           @info "updated support, new size is $(length(possible_supp))"
-           is_first_prime = false                                             
-       end
+    minpoly_ord = minpoly_order(ode, x) 
+    possible_supp = f_min_support(ode, x, minpoly_ord)
+    l_supp = length(possible_supp)
+    R, _ = polynomial_ring(QQ, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:minpoly_ord]...])
+ 
+    prod_of_done_primes = one(ZZ)
+    prim_cnt = 0
+ 
+    sol_vector = zeros(QQ, l_supp)
+    crts = zeros(ZZ, l_supp)
+    found_cand = falses(l_supp)
+    is_stable = falses(l_supp)
     
-       sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
-       for (i, a) in enumerate(sol_vector_mod_p)
-           is_stable[i] && continue
+    is_first_prime = true
+    while !all(is_stable)
+        @label nxt_prm                                                                                                                 
+        starting_prime = Hecke.next_prime(starting_prime)
+        p = ZZ(starting_prime)                                        
+        prim_cnt += 1
+        
+        @info "Chose $prim_cnt th prime $p, $(length(findall(is_stable))) stable coefficients"
+        sol_mod_p = eliminate_with_love_and_support_modp(ode, x, Int(p), minpoly_ord, possible_supp)  
 
-           if found_cand[i]
-               if Oscar.divides(denominator(sol_vector[i]), p)[1]
-                   @info "bad prime, restarting"
-                   @goto nxt_prm
-               end
-               sol_i_mod_p = qq_to_mod(sol_vector[i], p)
-               if sol_i_mod_p == sol_vector_mod_p[i]
-                   is_stable[i] = true
-                   continue
-               end
-           end
+        if is_first_prime
+            filter!(exp -> !iszero(coeff(sol_mod_p, Vector{Int}(exp))), possible_supp)
+            add_unit!(possible_supp, minpoly_ord)
+            l_supp = length(possible_supp)
+            resize!(sol_vector, l_supp)
+            resize!(crts, l_supp)
+            resize!(found_cand, l_supp)
+            resize!(is_stable, l_supp)
+            @info "updated support, new size is $(length(possible_supp))"
+            is_first_prime = false                                             
+        end
+    
+        sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
+        for (i, a) in enumerate(sol_vector_mod_p)
+            is_stable[i] && continue
 
-           crts[i] = crt(Oscar.lift(ZZ, a), p, ZZ(crts[i]), prod_of_done_primes)
+            if found_cand[i]
+                if Oscar.divides(denominator(sol_vector[i]), p)[1]
+                    @info "bad prime, restarting"
+                    @goto nxt_prm
+                end
+                sol_i_mod_p = qq_to_mod(sol_vector[i], p)
+                if sol_i_mod_p == sol_vector_mod_p[i]
+                    is_stable[i] = true
+                    continue
+                end
+            end
+
+            crts[i] = crt(Oscar.lift(ZZ, a), p, ZZ(crts[i]), prod_of_done_primes)
            
-           succ, r, s = rational_reconstruction(
-               crts[i],
-               ZZ(p * prod_of_done_primes)
-           )
-           if succ
-               sol_vector[i] = r//s
-               found_cand[i] = true
-           end
-       end
+            succ, r, s = rational_reconstruction(
+                crts[i],
+                ZZ(p * prod_of_done_primes)
+            )
+            if succ
+                sol_vector[i] = r//s
+                found_cand[i] = true
+            end
+        end
 
-       prod_of_done_primes *= p
-   end 
+        prod_of_done_primes *= p
+    end 
     
-   mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
-   g = sum([s * m for (s, m) in zip(sol_vector, mons)])
-   return g, starting_prime
+    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
+    g = sum([s * m for (s, m) in zip(sol_vector, mons)])
+    return g, starting_prime
 end 
 
 function rand_ode(degs::Vector{Int}; char=0)
@@ -160,6 +160,7 @@ function rand_ode(degs::Vector{Int}; char=0)
     )
 end
 
+# Gleb: fix the theorem numberation here
 # -------- estimate support for f_min based on Theorems 1 and 2 -------- #
 
 function f_min_support(ode::ODE, x, jacobian_rank::Int; info = true)
@@ -197,15 +198,15 @@ end
 # -------- Functions for test of correctness -------- #
                     
 function is_zero_mod_ode(pol, ode::ODE, x)
-   start_time = time()                    
-   n = length(ode.x_vars)
-    
-   dervs = lie_derivatives(n, ode, x) 
-
-   res = pol(dervs...) 
-                     
-   @info "Checked membership deterministaically in $(time() - start_time) seconds"
-   return iszero(res)
+    start_time = time()                    
+    n = length(ode.x_vars)
+     
+    dervs = lie_derivatives(n, ode, x) 
+ 
+    res = pol(dervs...) 
+                      
+    @info "Checked membership deterministaically in $(time() - start_time) seconds"
+    return iszero(res)
 end
                         
 function is_zero_mod_ode_prob(pol, ode::ODE, x, prob = 0.99) 
@@ -224,8 +225,8 @@ function is_zero_mod_ode_prob(pol, ode::ODE, x, prob = 0.99)
     evals = [deriv(vec...) for deriv in lie_derivs]                        
                        
     res = pol(evals...)
-   @info "Checked membership probabilistically in $(time() - start_time) seconds"     
-   return iszero(res)
+    @info "Checked membership probabilistically in $(time() - start_time) seconds"     
+    return iszero(res)
 end                            
 
 # -------- Function for matrix construction for Ansatz -------- #
@@ -302,11 +303,12 @@ function minpoly_order(ode, x)
 end                                            
 
 function qq_to_mod(a::QQFieldElem, p)
-  return numerator(a) * invmod(denominator(a), ZZ(p))
+    return numerator(a) * invmod(denominator(a), ZZ(p))
 end
 
+# Gleb: Not jac ! 
+# One would suggest to hit the road...
 function add_unit!(supp, jac)
-                                                                                                                        
     l_supp = length(supp)
     for j in 1:(jac + 2)           
         unit = [i == j ? one(ZZ) : zero(ZZ) for i in 1:(jac + 1)]
@@ -337,6 +339,7 @@ function sort_gleb!(exp_vectors::Vector{PointVector{ZZRingElem}})
     sort!(exp_vectors, by = s -> [sum(s), s[end:-1:1]...])
 end
 
+# Gleb: maybe to move closer to rand_ode
 #Randomize general polynomial
 function rand_poly(deg, vars)
     result = 0
