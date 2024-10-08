@@ -32,16 +32,33 @@ push!(
     ),
     
     @ODEmodel(
-        x1'(t) = x1(t)^2 + 2*x2(t)^2 + 3*x3(t)^2 + 1,
+        x1'(t) = 2 * x1(t)^2 + 17*x2(t)^2 + 3*x3(t)^2 + 1,
         x2'(t) = x2(t)^2,
         x3'(t) = x3(t)^2,
         y(t) = x1(t)
-    )
+    ),
+    
+    @ODEmodel(
+        x1'(t) = 2^31 * x1(t)^2 + 2^32 *x2(t)^2 + 3^18 *x3(t)^2 + 2^30,
+        x2'(t) = 2^31 * x2(t)^2 + 2^15 * x1(t),
+        x3'(t) = 2^12 * x3(t)^2 + 2^12 * x1(t) + 2^11 * x2(t)^2,
+        y(t) = x1(t)
+    ),
+    
+    @ODEmodel(
+        x1'(t) = 3 * x1(t)^2 + 16 * x2(t)^2 + 18 * x1(t) + 42,
+        x2'(t) = 2^31 * x2(t)^2 + 2^15 * x1(t) + 17,
+        x3'(t) = 19 * x1(t) + 95 * x2(t),
+        y(t) = x1(t)
+    ),
+    
+    
+    
 )
 
 # Gleb: the following test cases should be added:
-#   * where the result of elimination is of lower order
-#   * where the coefficients are very large
+#  + * where the result of elimination is of lower order
+#  + * where the coefficients are very large
 #   * the one which was a counter example for the power series approach
 
 @testset "Testing against the standard algorithms" begin

@@ -35,7 +35,15 @@ function eliminate(ode::ODE, x, prob = 0.99)
     end
 
     return minimal_poly                                                                                    
-end  
+end 
+
+
+"""
+    eliminate_with_love_and_support_modp(ode, x, p, ord, possible_supp)
+
+Computes a polynomial of the order `ord` over a finite field F_p for the `x` variable of a polynomial ODE model `ode` (without inputs and parameters) with support `possible_supp`.
+
+"""
                                                                                                                     
 function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minpoly_order(ode, x),
                                               possible_supp::Vector{PointVector{ZZRingElem}}=f_min_support(ode, x, ord); 
@@ -74,6 +82,15 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
 
     return g * (1 // Oscar.leading_coefficient(g))
 end
+
+
+"""
+    eliminate_with_love_and_support(ode, x, p)
+
+Computes the minimal polynomial for the `x` variable of a polynomial ODE model `ode` (without inputs and parameters)
+using evaluation-interpolation approach over a finite field F_p.
+
+"""
 
 function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
     minpoly_ord = minpoly_order(ode, x) 
@@ -146,7 +163,42 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
     g = sum([s * m for (s, m) in zip(sol_vector, mons)])
     return g, starting_prime
 end 
+                                
+                                
+# Gleb: maybe to move closer to rand_ode
 
+"""
+    rand_poly(deg, vars)
+
+Computes the polynomial of degree 'deg' in variables 'vars' 
+with coefficient sampled uniformly at random from the integers in [-1000, 1000].
+
+"""
+                                
+function rand_poly(deg, vars)
+    result = 0
+    degs = [collect(0:deg) for v in vars]
+
+        for m in IterTools.product(degs...)
+            if sum(m) <= deg
+                monom = rand(1:5)
+                for i in 1:length(vars)
+                    monom *= vars[i]^m[i]
+                end
+               result += rand(1:200) * monom
+            end
+        end
+
+    return result
+end                                
+                                
+"""
+    rand_ode(degs)
+
+Computes the polynomial ODE model `ode` with the right hand side of degrees ‘degs’.
+                                            
+"""
+                                                
 function rand_ode(degs::Vector{Int}; char=0)
     n = length(degs)
     F = iszero(char) ? QQ : GF(char)
@@ -161,7 +213,7 @@ function rand_ode(degs::Vector{Int}; char=0)
 end
 
 # Gleb: fix the theorem numberation here
-# -------- estimate support for f_min based on Theorems 1 and 2 -------- #
+# -------- estimate support for f_min based on Theorem 1  -------- #
 
 function f_min_support(ode::ODE, x, jacobian_rank::Int; info = true)
     n = jacobian_rank
@@ -308,10 +360,10 @@ end
 
 # Gleb: Not jac ! 
 # One would suggest to hit the road...
-function add_unit!(supp, jac)
+function add_unit!(supp, jacobian_rank)
     l_supp = length(supp)
-    for j in 1:(jac + 2)           
-        unit = [i == j ? one(ZZ) : zero(ZZ) for i in 1:(jac + 1)]
+    for j in 1:(jacobian_rank + 2)           
+        unit = [i == j ? one(ZZ) : zero(ZZ) for i in 1:(jacobian_rank + 1)]
         !(unit in supp) && push!(supp, point_vector(ZZ, unit))  
     end                                                                                                                           
     l_supp < length(supp) && sort_gleb!(supp)
@@ -339,23 +391,6 @@ function sort_gleb!(exp_vectors::Vector{PointVector{ZZRingElem}})
     sort!(exp_vectors, by = s -> [sum(s), s[end:-1:1]...])
 end
 
-# Gleb: maybe to move closer to rand_ode
-#Randomize general polynomial
-function rand_poly(deg, vars)
-    result = 0
-    degs = [collect(0:deg) for v in vars]
 
-        for m in IterTools.product(degs...)
-            if sum(m) <= deg
-                monom = rand(1:5)
-                for i in 1:length(vars)
-                    monom *= vars[i]^m[i]
-                end
-               result += rand(1:200) * monom
-            end
-        end
-
-    return result
-end
 
 # ————————————————— #
