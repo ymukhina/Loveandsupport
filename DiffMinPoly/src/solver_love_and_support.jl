@@ -19,7 +19,7 @@ If `prob` is set to 1, the result is guaranteed to be correct.
 function eliminate(ode::ODE, x, prob = 0.99)
                                                                            
     @assert x in ode.x_vars
-    minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, 2^17 - 1)
+    minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, 2^61 - 1)
                                                                                                                 
     check = min_pol -> begin
         if isone(prob)
@@ -164,8 +164,6 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
     return g, starting_prime
 end 
                                 
-                                
-# Gleb: maybe to move closer to rand_ode
 
 """
     rand_poly(deg, vars)
@@ -212,7 +210,7 @@ function rand_ode(degs::Vector{Int}; char=0)
     )
 end
 
-# Gleb: fix the theorem numberation here
+
 # -------- estimate support for f_min based on Theorem 1  -------- #
 
 function f_min_support(ode::ODE, x, jacobian_rank::Int; info = true)
@@ -358,16 +356,16 @@ function qq_to_mod(a::QQFieldElem, p)
     return numerator(a) * invmod(denominator(a), ZZ(p))
 end
 
-# Gleb: Not jac ! 
+
 # One would suggest to hit the road...
 function add_unit!(supp, jacobian_rank)
     l_supp = length(supp)
-    for j in 1:(jacobian_rank + 2)           
-        unit = [i == j ? one(ZZ) : zero(ZZ) for i in 1:(jacobian_rank + 1)]
+    for j in 1:(jacobian_rank + 2)         
+        unit = [i == j ? one(ZZ) : zero(ZZ) for i in 1:(jacobian_rank + 1)] 
         !(unit in supp) && push!(supp, point_vector(ZZ, unit))  
     end                                                                                                                           
     l_supp < length(supp) && sort_gleb!(supp)
-    return supp
+    return supp 
 end                                                                                                                        
 
 function lie_derivative(pol, ode)
