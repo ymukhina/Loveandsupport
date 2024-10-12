@@ -59,7 +59,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
     l = length(possible_supp)
     info && @info "The size of the estimates support is $(length(possible_supp))"
 
-    tim2 = @elapsed ls = build_matrix_multipoint_fast(F, ode_mod_p, x_mod_p, ord, possible_supp, info = info)
+    tim2 = @elapsed ls = build_matrix_multipoint(F, ode_mod_p, x_mod_p, ord, possible_supp, info = info)
                                                                     
     info && @info "eval method $(tim2)"
 
@@ -282,7 +282,7 @@ end
 # -------- Function for matrix construction for Ansatz -------- #
 
 # This function assumes that support contains the unit vectors and is sorted by `sort_gleb!`
-function build_matrix_multipoint_fast(F, ode, x, minpoly_ord, support; info = true)
+function build_matrix_multipoint(F, ode, x, minpoly_ord, support; info = true)
     var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1) ]                                           
     n = length(ode.x_vars)
     @info "computing derivatives"
@@ -388,7 +388,5 @@ end
 function sort_gleb!(exp_vectors::Vector{PointVector{ZZRingElem}})
     sort!(exp_vectors, by = s -> [sum(s), s[end:-1:1]...])
 end
-
-
 
 # ————————————————— #
