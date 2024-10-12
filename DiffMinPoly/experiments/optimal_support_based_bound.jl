@@ -1,9 +1,9 @@
+# This script produces the table for Section 4.2 of the paper aiming
+# at experimental exploration of the potential support-based improvements for the bound
+
 using DiffMinPoly
-#using Nemo
 using Groebner
 using Oscar
-#using Polyhedra
-#import GLPK
 
 
 function my_convex_hull(points)
@@ -37,7 +37,7 @@ for d in DEGREES
 
     #computing mixed fiber polytope
     S = parent(first(polys_new))
-    gb = groebner_basis_f4(Oscar.ideal(S, polys_new), eliminate = 2, complete_reduction=true, info_level=2)
+    gb = groebner_basis_f4(Oscar.ideal(S, polys_new), eliminate = 2, complete_reduction=true)
     supp = collect(DiffMinPoly.exponent_vectors(gb[1]))
 
     newton_polytope = my_convex_hull(supp)

@@ -1,4 +1,4 @@
-# This script produces the table for Section 4.2 of the paper aiming
+# This script produces the table for Section 4.3 of the paper aiming
 # at experimental exploration of an alternative approach via tropical implicitization
 
 
@@ -27,8 +27,6 @@ push!(
         y(t) = x1(t)
     )
 )            
-   
-
 
 for c in cases
     ode = c
