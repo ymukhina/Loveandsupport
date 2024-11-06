@@ -19,7 +19,7 @@ If `prob` is set to 1, the result is guaranteed to be correct.
 function eliminate(ode::ODE, x, prob = 0.99)
                                                                            
     @assert x in ode.x_vars
-    minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, 2^31 - 1)
+    minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, 2^61 - 1)
                                                                                                                 
     check = min_pol -> begin
         if isone(prob)
