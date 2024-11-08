@@ -19,7 +19,7 @@ If `prob` is set to 1, the result is guaranteed to be correct.
 function eliminate(ode::ODE, x, prob = 0.99)
                                                                            
     @assert x in ode.x_vars
-    minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, 2^61 - 1)
+    minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, 65519) 
                                                                                                                 
     check = min_pol -> begin
         if isone(prob)
@@ -28,7 +28,7 @@ function eliminate(ode::ODE, x, prob = 0.99)
             is_zero_mod_ode_prob(min_pol, ode, x, prob)
         end
     end
-            
+    
     while check(minimal_poly) == false
         starting_prime = Hecke.next_prime(starting_prime)
         minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, starting_prime)
@@ -108,7 +108,8 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
     
     is_first_prime = true
     while !all(is_stable)
-        @label nxt_prm                                                                                                                 
+        @label nxt_prm 
+        
         starting_prime = Hecke.next_prime(starting_prime)
         p = ZZ(starting_prime)                                        
         prim_cnt += 1
@@ -125,7 +126,8 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
             resize!(found_cand, l_supp)
             resize!(is_stable, l_supp)
             @info "updated support, new size is $(length(possible_supp))"
-            is_first_prime = false                                             
+            is_first_prime = false
+            starting_prime = rand(2^32:2^62)
         end
     
         sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
