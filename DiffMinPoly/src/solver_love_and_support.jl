@@ -2,7 +2,7 @@ using Oscar
 using Nemo
 using StructuralIdentifiability
 using IterTools
-import StructuralIdentifiability: _reduce_mod_p, reduce_ode_mod_p, power_series_solution, ps_diff, var_to_str, switch_ring 
+import StructuralIdentifiability: reduce_ode_mod_p, var_to_str, switch_ring
 using Random
 
 const Ptype = QQMPolyRingElem
@@ -19,7 +19,9 @@ If `prob` is set to 1, the result is guaranteed to be correct.
 function eliminate(ode::ODE, x, prob = 0.99)
                                                                            
     @assert x in ode.x_vars
-    minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, 65519) 
+    minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, rand(2^25:2^32 - 1))
+
+    # add a comment
                                                                                                                 
     check = min_pol -> begin
         if isone(prob)
@@ -110,6 +112,7 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
     while !all(is_stable)
         @label nxt_prm 
         
+
         starting_prime = Hecke.next_prime(starting_prime)
         p = ZZ(starting_prime)                                        
         prim_cnt += 1
@@ -117,7 +120,22 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
         @info "Chose $prim_cnt th prime $p, $(length(findall(is_stable))) stable coefficients"
         sol_mod_p = eliminate_with_love_and_support_modp(ode, x, Int(p), minpoly_ord, possible_supp)  
 
+
+
         if is_first_prime
+            # starting_prime = 65519
+            # r = ZZ(starting_prime)                                        
+            # @info "Chose $prim_cnt th prime $r, $(length(findall(is_stable))) stable coefficients"
+            # sol_mod_p_2 = eliminate_with_love_and_support_modp(ode, x, Int(r), minpoly_ord, possible_supp) 
+            # filter!(exp -> !iszero(coeff(sol_mod_p_2, Vector{Int}(exp))), possible_supp)
+            # add_unit!(possible_supp, minpoly_ord)
+            # l_supp = length(possible_supp)
+            # resize!(sol_vector, l_supp)
+            # resize!(crts, l_supp)
+            # resize!(found_cand, l_supp)
+            # resize!(is_stable, l_supp)
+            # @info "updated support, new size is $(length(possible_supp))"
+
             filter!(exp -> !iszero(coeff(sol_mod_p, Vector{Int}(exp))), possible_supp)
             add_unit!(possible_supp, minpoly_ord)
             l_supp = length(possible_supp)
@@ -126,8 +144,9 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
             resize!(found_cand, l_supp)
             resize!(is_stable, l_supp)
             @info "updated support, new size is $(length(possible_supp))"
+
             is_first_prime = false
-            starting_prime = rand(2^32:2^62)
+            starting_prime = Hecke.next_prime(rand(2^32:2^62))
         end
     
         sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
@@ -185,7 +204,7 @@ function rand_poly(deg, vars)
                 for i in 1:length(vars)
                     monom *= vars[i]^m[i]
                 end
-               result += rand(1:200) * monom
+               result += rand(1:2) * monom
             end
         end
 
