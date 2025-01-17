@@ -11,7 +11,7 @@ The package can be installed from this repository by
 
 ```julia
 using Pkg
-Pkg.add(url = "https://github.com/ymukhina/Loveandsupport.git", subdir="DiffMinPoly")
+Pkg.add(url="https://github.com/ymukhina/Loveandsupport.git", subdir="DiffMinPoly")
 ```
 
 ## How to use
@@ -29,6 +29,7 @@ to perform the elimination for variable $x_1$ we use the function `eliminate`.
 For instance:
 
 ```julia
+using DiffMinPoly
 using StructuralIdentifiability
 
 
