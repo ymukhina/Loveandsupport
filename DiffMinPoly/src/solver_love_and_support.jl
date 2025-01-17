@@ -204,7 +204,7 @@ function rand_poly(deg, vars)
                 for i in 1:length(vars)
                     monom *= vars[i]^m[i]
                 end
-               result += rand(1:2) * monom
+               result += rand(1:20) * monom
             end
         end
 

@@ -18,11 +18,11 @@ Pkg.add(url = "https://github.com/ymukhina/Loveandsupport.git", subdir="DiffMinP
 
 The package can be loaded by `using DiffMinPoly`.
 
-For the ODE system
+For the ODE system 
 ``` math 
 \begin{cases} 
     x_1' = x_2^2,\\
-    x_2' = x_1
+    x_2' = x_1.
     \end{cases} 
 ```
 to perform the elimination for variable $x_1$ we use the function `eliminate`. 
