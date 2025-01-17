@@ -39,7 +39,7 @@ end
 
 cases = []
 
-R, (x1, x2) = PolynomialRing(QQ, ["x1", "x2"])
+R, (x1, x2) = polynomial_ring(QQ, ["x1", "x2"])
 push!(
     cases,
     Dict(
@@ -55,7 +55,7 @@ push!(
     )
 )
 
-R, (x1, x2, x3) = PolynomialRing(QQ, ["x1", "x2", "x3"])
+R, (x1, x2, x3) = polynomial_ring(QQ, ["x1", "x2", "x3"])
 
 push!(
     cases,

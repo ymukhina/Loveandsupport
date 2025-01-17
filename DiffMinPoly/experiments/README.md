@@ -17,7 +17,12 @@ include("DiffMinPoly/experiments/optimal_support_based_bound.jl")
 ```
 
 
-To produce the table for Section 4.3 of the paper aiming at experimental exploration of an alternative approach via tropical implicitization use
+To produce the data for Section 4.3 of the paper aiming at experimental exploration of an alternative approach via tropical implicitization use
 ```julia
 include("DiffMinPoly/experiments/tropical_comparison.jl")
+```
+
+and 
+```julia
+include("DiffMinPoly/experiments/tropical_implicitization.jl")
 ```

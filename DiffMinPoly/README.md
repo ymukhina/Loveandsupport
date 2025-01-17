@@ -29,6 +29,9 @@ to perform the elimination for variable $x_1$ we use the function `eliminate`.
 For instance:
 
 ```julia
+using StructuralIdentifiability
+
+
 ode = @ODEmodel(
     x1'(t) = x2(t)^2,
     x2'(t) = x1(t),
