@@ -11,7 +11,7 @@ The package can be installed from this repository by
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/ymukhina/Loveandsupport.git")
+Pkg.add(url = "https://github.com/ymukhina/Loveandsupport.git", subdir="DiffMinPoly")
 ```
 
 ## How to use
@@ -19,20 +19,21 @@ Pkg.add(url="https://github.com/ymukhina/Loveandsupport.git")
 The package can be loaded by `using DiffMinPoly`.
 
 For the ODE system
-$$ \begin{cases} 
+``` math 
+\begin{cases} 
     x_1' = x_2^2,\\
     x_2' = x_1
-    \end{cases}
-$$  
+    \end{cases} 
+```
 to perform the elimination for variable $x_1$ we use the function `eliminate`. 
 For instance:
 
 ```julia
 ode = @ODEmodel(
-               x1'(t) = x2(t)^2,
-               x2'(t) = x1(t),
-               y(t) = x1(t)
-           )
+    x1'(t) = x2(t)^2,
+    x2'(t) = x1(t),
+    y(t) = x1(t)
+)
 
 eliminate(ode, x1)
 ```
