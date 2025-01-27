@@ -51,3 +51,7 @@ x1(t)^2*x1(t)^(1) - 1//4*x1(t)^(2)^2
 ## Contacts
 
 Maintained by Yulia Mukhina (yulia.mukhina@lix.polytechnique.fr) and Gleb Pogudin (gleb.pogudin@polytechnique.edu).
+
+## References
+
+Based on the paper [Projecting dynamical systems via a support bound](https://arxiv.org/abs/2501.13680), preprint, 2025
