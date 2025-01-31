@@ -32,6 +32,7 @@ function eliminate(ode::ODE, x, prob = 0.99)
     end
     
     while check(minimal_poly) == false
+        @info "Running Love & Support again. Incorrect Minimal Polynomial :("
         starting_prime = Hecke.next_prime(starting_prime)
         minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, starting_prime)
     end
@@ -61,26 +62,45 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
     l = length(possible_supp)
     info && @info "The size of the estimates support is $(length(possible_supp))"
 
-    tim2 = @elapsed ls = build_matrix_multipoint(F, ode_mod_p, x_mod_p, ord, possible_supp, info = info)
+    tim2 = @elapsed M, pivot = build_matrix_multipoint(F, ode_mod_p, x_mod_p, ord, possible_supp, info = info)
                                                                     
-    info && @info "eval method $(tim2)"
+    info && @info "Building Linear System in: $(tim2)"
 
-    info && @info "linear system dims $(size(ls))"
+    strt = time()
+
+    new_order = find_new_order(M, pivot)
+    ls = reorder_ls(M, new_order, F)
+
+    info && @info "Linear System dims $(size(ls))"
+
+    new_supp = reorder_supp(possible_supp, new_order)
+
+    ls_UL, ls_LL, ls_LR = ls[1:pivot, 1:pivot], ls[(pivot + 1):l, 1:pivot], ls[(pivot + 1):l, (pivot + 1):l]
+    ls = nothing
+
+    info && @info "Linear System reduced in $(time() - strt)"
+
+    strt = time()
     
-    system_soltime = @elapsed ker = kernel(ls, side=:right)
-    info && @info "Linear system solved in $system_soltime"
+    v1 = kernel(ls_UL, side=:right)
+    temp_LL = -(ls_LL * v1)
+    v2 = solve(ls_LR, temp_LL, side=:right)
+
+    ker = vcat(v1, v2)
+
+    info && @info "Linear System solved in $(time() - strt)"
     dim = size(ker)[2]
     info && @info "The dimension of the solution space is $(dim)"
 
-    start_constructing_time = time()
+    strt = time()
 
     R, _ = polynomial_ring(F, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:ord]...])
             
-    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
+    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in new_supp]
     
     g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
        
-    info && @info "The resulting polynomial computes in $(time() - start_constructing_time)"
+    info && @info "The resulting polynomial computes in $(time() - strt)"
 
     return g * (1 // Oscar.leading_coefficient(g))
 end
@@ -317,17 +337,38 @@ function build_matrix_multipoint(F, ode, x, minpoly_ord, support; info = true)
     M = zero(S)
     supp_to_index = Dict(s => i for (i, s) in enumerate(support))
 
-    # filling the columns corresponding to the derivatives
-    for i in 1:lsup
-        M[i, 1] = 1
-        vec = [rand(F) for _ in 1:(n + 1) ]                                      
-        evals = [derv(vec...) for derv in dervs]
-        
-        
-        for j in 1:(minpoly_ord + 1)
-            supp = var_to_sup(j)
-            ind = supp_to_index[supp]
-            M[i, ind] = evals[j]
+    k1 = 0
+    for v in support  #O(l_supp)
+        if v[1] == 0  
+            k1 += 1
+        end
+    end
+
+    # filling the columns corresponding to the derivatives   
+    for i in 1:k1                 
+        M[i, 1] = 1    
+        vec = [rand(F) for _ in 1:(n + 1)]
+        vec[1] = F(0)                                   
+        evals = [derv(vec...) for derv in dervs]      
+
+        for j in 1:(minpoly_ord + 1)         
+            supp = var_to_sup(j)     
+            ind = supp_to_index[supp]   
+            M[i, ind] = evals[j]        
+        end
+    end
+
+    if !(k1 == lsup)
+        for i in (k1 + 1):lsup
+            M[i, 1] = 1    
+            vec = [rand(F) for _ in 1:(n + 1)]
+            evals = [derv(vec...) for derv in dervs]      
+    
+            for j in 1:(minpoly_ord + 1)     
+                supp = var_to_sup(j)        
+                ind = supp_to_index[supp]   
+                M[i, ind] = evals[j]      
+            end    
         end
     end
 
@@ -357,7 +398,7 @@ function build_matrix_multipoint(F, ode, x, minpoly_ord, support; info = true)
         end
     end
       
-  return M
+  return M, k1
 end
 
 # -------- Auxiliary Functions -------- #
