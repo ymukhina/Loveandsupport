@@ -159,7 +159,13 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
 
     end
 
-    dim = size(ker)[2]
+
+    if ndims(ker) == 1  # Check if ker is a 1D vector (n,)
+        ker = reshape(ker, size(ker, 1), 1)  # Convert to (n,1)
+    end
+
+    dim = size(ker, 2)    
+
     info && @info "The dimension of the solution space is $(dim)"
 
     start_constructing_time = time()
@@ -168,8 +174,8 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
             
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
     
-    g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
-       
+    g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])  #This breaks for similar reason as * in kernel_block ((((((
+                                                                            # I'll get to it tomorrow
     info && @info "The resulting polynomial computes in $(time() - start_constructing_time)"
 
     return g * (1 // Oscar.leading_coefficient(g))
