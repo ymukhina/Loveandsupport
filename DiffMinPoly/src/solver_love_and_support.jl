@@ -131,7 +131,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
     
     g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
-       
+    
     info && @info "The resulting polynomial computes in $(time() - strt)"
 
     return g * (1 // Oscar.leading_coefficient(g))
@@ -380,9 +380,9 @@ function build_matrix_multipoint(F, ode, x, minpoly_ord, support; info = true)
 
     S = matrix_space(F, k1, k1)
     A = zero(S)
-    S = matrix_space(F, lsup - k1, k1)                 #[[A, 0], [B, C]]  a lower triangular in 4 blocks
+    S = matrix_space(F, lsup - k1 + 10, k1)                 #[[A, 0], [B, C]]  a lower triangular in 4 blocks
     B = zero(S)                                     #Set up for Av1 = 0  &&  Bv1 + Cv2 = 0
-    S = matrix_space(F, lsup - k1, lsup - k1)       # Issue arises when sparse sys ==> many terms in supp [0, a, b]
+    S = matrix_space(F, lsup - k1 + 10, lsup - k1)       # Issue arises when sparse sys ==> many terms in supp [0, a, b]
     C = zero(S)                                     # depend on x1, e.g. each term of x1' has x1 and each term of x1'' has x1 for example
     supp_to_index1 = Dict(s => i for (i, s) in enumerate(s1))  #first part of supp with x1^0
     supp_to_index2 = Dict(s => i for (i, s) in enumerate(s2))  #second part of supp with x1^k with k != 0
@@ -435,7 +435,7 @@ function build_matrix_multipoint(F, ode, x, minpoly_ord, support; info = true)
     end
 
 
-    for i in 1:(lsup - k1)                 
+    for i in 1:(lsup - k1 + 10)
         B[i, 1] = 1    
         vec = [rand(F) for _ in 1:(n + 1) ] 
 
