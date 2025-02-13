@@ -74,7 +74,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
     info && @info "The dimension of the solution space is $(dim)"
 
     strt = time()
-
+    #####TO DO the extension with ker(M) the additional ((dim - 1), L) matrix to compensate for the missing info with x1 = 0
     R, _ = polynomial_ring(F, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:ord]...])
             
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
@@ -306,9 +306,8 @@ end
 # This function assumes that support contains the unit vectors and is sorted by `sort_gleb_max!`
 function build_matrix_multipoint(F, ode, x, minpoly_ord, support; info = true)
     n = length(ode.x_vars)
-    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1)]                                           
-
-
+    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1)]                #TODO: One function for 1 thing, refactor!!!!                             
+                                                                                                #Make a functiont that generates the interpolation points
     tim2 = @elapsed dervs = lie_derivatives(minpoly_ord, ode, x)
     info && @info "Computing Derivatives in: $(tim2)"
 
