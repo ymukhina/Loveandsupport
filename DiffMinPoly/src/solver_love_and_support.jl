@@ -60,25 +60,34 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
     l = length(possible_supp)
     info && @info "The size of the estimates support is $(length(possible_supp))"
 
-    tim2 = @elapsed ls_LL, ls_LR, v1 = build_matrix_multipoint(F, ode_mod_p, x_mod_p, ord, possible_supp, info = info)
+    tim2 = @elapsed dervs = lie_derivatives(ord, ode_mod_p, x_mod_p)
+    info && @info "Computing Derivatives in: $(tim2)"
+
+    tim2 = @elapsed ls_UL, ls_LL, ls_LR = build_matrix_multipoint(F, ode_mod_p, dervs, ord, possible_supp, info = info)
                                                                     
     info && @info "Building Linear System in: $(tim2)"
 
-    info && @info "Linear Systems with dims $(size(ls_LL)) and $(size(ls_LR))"
+    info && @info "Linear Systems with dims $(size(ls_UL)), $(size(ls_LL)) and $(size(ls_LR))"
 
-    info && @info "Solution space from Upper Left system $(size(v1, 2))"
-
-    ker = kernel_block(ls_LL, ls_LR, v1)
+    ker = kernel_blocks(ls_UL, ls_LL, ls_LR)
     
     dim = size(ker)[2]
     info && @info "The dimension of the solution space is $(dim)"
+    if dim > 1
+        info && @info "Adding $(dim-1) rows to compensate for loss"
+        strt = time()
+        E = make_matrix(n, dervs, ord, possible_supp, dim - 1, l)  #Sol_space = 1 <==> No additional rows
+        ker = solve_linear_combinations(E, ker)
+        info && @info "Additional rows added and reduced solution space computed in $(time() - strt)"
+        dim = size(ker, 2)
+        info && @info "The dimension of the solution space is $(dim)"
+    end
+
 
     strt = time()
-    #####TO DO the extension with ker(M) the additional ((dim - 1), L) matrix to compensate for the missing info with x1 = 0
     R, _ = polynomial_ring(F, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:ord]...])
             
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
-    
     g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
     
     info && @info "The resulting polynomial computes in $(time() - strt)"
@@ -304,29 +313,25 @@ end
 # -------- Function for matrix construction for Ansatz -------- #
 
 # This function assumes that support contains the unit vectors and is sorted by `sort_gleb_max!`
-function build_matrix_multipoint(F, ode, x, minpoly_ord, support; info = true)
+function build_matrix_multipoint(F, ode, dervs, minpoly_ord, support; info = true)
     n = length(ode.x_vars)
     var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1)]                #TODO: One function for 1 thing, refactor!!!!                             
                                                                                                 #Make a functiont that generates the interpolation points
-    tim2 = @elapsed dervs = lie_derivatives(minpoly_ord, ode, x)
-    info && @info "Computing Derivatives in: $(tim2)"
-
-    support = [Vector{Int64}(p) for p in support]
     lsup = length(support)  
 
-    s1, s2, k1 = split_supp(support, 1)
+    s1, s2, k1 = split_supp(support, 1)      #Make a new order prioritizing the first exponent while keeping sort_gleb logic in each subsupport
 
 
-    A = fill_matrix(F, n, dervs, minpoly_ord, s1, k1, k1, true)
+    A = make_matrix(n, dervs, minpoly_ord, s1, k1, k1, true)
 
-    v1 = kernel(A, side=:right)   #Check sol_space and adjust the additional interpolation points accordingly (extra rows for [B|C])
+    # v1 = kernel(A, side=:right)   #Check sol_space and adjust the additional interpolation points accordingly (extra rows for [B|C])
 
-    d = size(v1, 2) - 1
+    # d = size(v1, 2) - 1
 
-    BC = fill_matrix(F, n, dervs, minpoly_ord, support, lsup - k1 + d, lsup)  #Sol_space = 1 <==> No additional rows
+    BC = make_matrix(n, dervs, minpoly_ord, support, lsup - k1, lsup)  #Sol_space = 1 <==> No additional rows
     B, C = BC[:, 1:k1], BC[:, (k1 + 1):lsup]
 
-    return B, C, v1  #We don't need A anymore
+    return A, B, C 
 end
 
 # -------- Auxiliary Functions -------- #
