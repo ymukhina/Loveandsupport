@@ -20,8 +20,6 @@ function eliminate(ode::ODE, x, prob = 0.99)
                                                                            
     @assert x in ode.x_vars
     minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, rand(2^25:2^32 - 1))
-
-    # add a comment
                                                                                                                 
     check = min_pol -> begin
         if isone(prob)
@@ -32,6 +30,7 @@ function eliminate(ode::ODE, x, prob = 0.99)
     end
     
     while check(minimal_poly) == false
+        @info "Incorrect minimal polynomial. Running Love & Support again (T_T)"
         starting_prime = Hecke.next_prime(starting_prime)
         minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, starting_prime)
     end
@@ -61,26 +60,37 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
     l = length(possible_supp)
     info && @info "The size of the estimates support is $(length(possible_supp))"
 
-    tim2 = @elapsed ls = build_matrix_multipoint(F, ode_mod_p, x_mod_p, ord, possible_supp, info = info)
-                                                                    
-    info && @info "eval method $(tim2)"
+    tim2 = @elapsed dervs = lie_derivatives(ord, ode_mod_p, x_mod_p)
+    info && @info "Computing Derivatives in: $(tim2)"
 
-    info && @info "linear system dims $(size(ls))"
+    tim2 = @elapsed ls_UL, ls_LL, ls_LR = build_matrix_multipoint(F, ode_mod_p, dervs, ord, possible_supp, info = info)
+                                                                    
+    info && @info "Building Linear System in: $(tim2)"
+
+    info && @info "Linear Systems with dims $(size(ls_UL)), $(size(ls_LL)) and $(size(ls_LR))"
+
+    ker = kernel_blocks(ls_UL, ls_LL, ls_LR)
     
-    system_soltime = @elapsed ker = kernel(ls, side=:right)
-    info && @info "Linear system solved in $system_soltime"
     dim = size(ker)[2]
     info && @info "The dimension of the solution space is $(dim)"
+    if dim > 1
+        info && @info "Adding $(dim-1) rows to compensate for loss"
+        strt = time()
+        E = make_matrix(n, dervs, ord, possible_supp, dim - 1, l)  #Sol_space = 1 <==> No additional rows
+        ker = solve_linear_combinations(E, ker)
+        info && @info "Additional rows added and reduced solution space computed in $(time() - strt)"
+        dim = size(ker, 2)
+        info && @info "The dimension of the solution space is $(dim)"
+    end
 
-    start_constructing_time = time()
 
+    strt = time()
     R, _ = polynomial_ring(F, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:ord]...])
             
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
-    
     g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
-       
-    info && @info "The resulting polynomial computes in $(time() - start_constructing_time)"
+    
+    info && @info "The resulting polynomial computes in $(time() - strt)"
 
     return g * (1 // Oscar.leading_coefficient(g))
 end
@@ -263,7 +273,7 @@ function f_min_support(ode::ODE, x, jacobian_rank::Int; info = true)
         A = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
         b = vcat(ineq_rhs, zeros(QQ, n + 1))
     end
-    return sort_gleb!(collect(lattice_points(Oscar.polyhedron(A, b))))
+    return sort_gleb_max!(collect(lattice_points(Oscar.polyhedron(A, b))))
 end
 
 # -------- Functions for test of correctness -------- #
@@ -302,62 +312,27 @@ end
 
 # -------- Function for matrix construction for Ansatz -------- #
 
-# This function assumes that support contains the unit vectors and is sorted by `sort_gleb!`
-function build_matrix_multipoint(F, ode, x, minpoly_ord, support; info = true)
-    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1) ]                                           
+# This function assumes that support contains the unit vectors and is sorted by `sort_gleb_max!`
+function build_matrix_multipoint(F, ode, dervs, minpoly_ord, support; info = true)
     n = length(ode.x_vars)
-    @info "computing derivatives"
-    dervs = lie_derivatives(minpoly_ord, ode, x)
-    @info "done"
+    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1)]                #TODO: One function for 1 thing, refactor!!!!                             
+                                                                                                #Make a functiont that generates the interpolation points
+    lsup = length(support)  
 
-    support = [Vector{Int64}(p) for p in support]
-    
-    lsup = length(support)                                                    
-    S = matrix_space(F, lsup, lsup)
-    M = zero(S)
-    supp_to_index = Dict(s => i for (i, s) in enumerate(support))
+    # Gleb: better naming
+    s1, s2, k1 = split_supp(support, 1)      #Make a new order prioritizing the first exponent while keeping sort_gleb logic in each subsupport
 
-    # filling the columns corresponding to the derivatives
-    for i in 1:lsup
-        M[i, 1] = 1
-        vec = [rand(F) for _ in 1:(n + 1) ]                                      
-        evals = [derv(vec...) for derv in dervs]
-        
-        
-        for j in 1:(minpoly_ord + 1)
-            supp = var_to_sup(j)
-            ind = supp_to_index[supp]
-            M[i, ind] = evals[j]
-        end
-    end
 
-    # filling the rest of the columns
-    for i in (minpoly_ord + 3):lsup
-        supp = support[i]
-        supp_divisor = copy(supp)
-        nonzero_ind = findfirst(x -> x > 0, supp_divisor)
-        supp_divisor[nonzero_ind] -= 1                                                 
-        multiplier = zeros(Int, minpoly_ord + 1)
-        multiplier[nonzero_ind] += 1
-        while !haskey(supp_to_index, supp_divisor)
-            nonzero_ind = findfirst(x -> x > 0, supp_divisor)
-            supp_divisor[nonzero_ind] -= 1
-            multiplier[nonzero_ind] += 1
-        end                                                    
-        
-        supp_div_ind = supp_to_index[supp_divisor]
-        mult_ind = get(supp_to_index, multiplier, -1)
-        for j in 1:lsup
-            if mult_ind == -1
-                multiplier_eval = prod(M[j, 2:(minpoly_ord + 2)] .^ multiplier)
-            else
-                multiplier_eval = M[j, mult_ind]
-            end
-            M[j, i] = M[j, supp_div_ind] * multiplier_eval           
-        end
-    end
-      
-  return M
+    A = make_matrix(n, dervs, minpoly_ord, s1, k1, k1, true)
+
+    # v1 = kernel(A, side=:right)   #Check sol_space and adjust the additional interpolation points accordingly (extra rows for [B|C])
+
+    # d = size(v1, 2) - 1
+
+    BC = make_matrix(n, dervs, minpoly_ord, support, lsup - k1, lsup)  #Sol_space = 1 <==> No additional rows
+    B, C = BC[:, 1:k1], BC[:, (k1 + 1):lsup]
+
+    return A, B, C 
 end
 
 # -------- Auxiliary Functions -------- #
@@ -378,14 +353,13 @@ function qq_to_mod(a::QQFieldElem, p)
 end
 
 
-# One would suggest to hit the road...
 function add_unit!(supp, jacobian_rank)
     l_supp = length(supp)
     for j in 1:(jacobian_rank + 2)         
         unit = [i == j ? one(ZZ) : zero(ZZ) for i in 1:(jacobian_rank + 1)] 
         !(unit in supp) && push!(supp, point_vector(ZZ, unit))  
     end                                                                                                                           
-    l_supp < length(supp) && sort_gleb!(supp)
+    l_supp < length(supp) && sort_gleb_max!(supp)
     return supp 
 end                                                                                                                        
 
@@ -409,5 +383,10 @@ end
 function sort_gleb!(exp_vectors::Vector{PointVector{ZZRingElem}})
     sort!(exp_vectors, by = s -> [sum(s), s[end:-1:1]...])
 end
+
+function sort_gleb_max!(exp_vectors::Vector{PointVector{ZZRingElem}})
+    sort!(exp_vectors, by = s -> (s[1] == 0 ? (0, sum(s), s[end:-1:1]...) : (1, sum(s), s[end:-1:1]...)))
+end
+
 
 # ————————————————— #
