@@ -1,30 +1,28 @@
 function kernel_blocks(ls_UL, ls_LL, ls_LR) 
     strt = time()
-    v1 = kernel(ls_UL, side=:right)
 
+    v1 = kernel(ls_UL, side=:right)
     ker = solve_linear_combinations_blocks(ls_LL, ls_LR, v1)
+
     @info "Linear System solved in $(time() - strt)"
 
     return ker
-
 end
-
 
 
 function solve_linear_combinations(ls, sol_space)
     F = base_ring(ls)
 
+    # Gleb: better variable naming
     m_temp = size(sol_space, 2)
     ls_n = size(ls, 1)
     S = matrix_space(F, ls_n, m_temp)
     aug = zero(S)     
-        
-
+    
     for j in 1:m_temp
         w_i = ls * sol_space[:, j]
         aug[:, j] = w_i
     end
-
 
     lambs = kernel(aug, side=:right)
 
@@ -45,6 +43,7 @@ end
 function solve_linear_combinations_blocks(ls_L, ls_R, sol_space)
     F = base_ring(ls_L)
 
+    # Gleb: naming
     n_temp, m_temp = size(sol_space)
     ls_n, ls_m = size(ls_R)
     S = matrix_space(F, ls_n, ls_m + m_temp)
@@ -80,7 +79,8 @@ end
 
  #Assuming ordered by sort_gleb_max! 
  function split_supp(supp, n_splits)  #   For now support only cuts by 1 e.g. the 3 blocks A, B, C
-    k1 = 0                     
+    k1 = 0
+    # Gleb: I think you can just use `findfirst` built-in function here
     for i in 1:length(supp)
         if supp[i][1] != 0
             k1 = i - 1      

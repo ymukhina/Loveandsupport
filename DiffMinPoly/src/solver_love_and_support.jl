@@ -319,6 +319,7 @@ function build_matrix_multipoint(F, ode, dervs, minpoly_ord, support; info = tru
                                                                                                 #Make a functiont that generates the interpolation points
     lsup = length(support)  
 
+    # Gleb: better naming
     s1, s2, k1 = split_supp(support, 1)      #Make a new order prioritizing the first exponent while keeping sort_gleb logic in each subsupport
 
 
@@ -352,7 +353,6 @@ function qq_to_mod(a::QQFieldElem, p)
 end
 
 
-# One would suggest to hit the road...
 function add_unit!(supp, jacobian_rank)
     l_supp = length(supp)
     for j in 1:(jacobian_rank + 2)         
