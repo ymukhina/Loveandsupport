@@ -63,7 +63,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
     tim2 = @elapsed dervs = lie_derivatives(ord, ode_mod_p, x_mod_p)
     info && @info "Computing Derivatives in: $(tim2)"
 
-    tim2 = @elapsed ls_U, ls_L = build_matrix_multipoint(F, ode_mod_p, dervs, ord, possible_supp, info = info)
+    tim2 = @elapsed ls_U, ls_L = build_matrix_multipoint(ode_mod_p, dervs, ord, possible_supp, info = info)
                                                                     
     info && @info "Building Linear System in: $(tim2)"
 
@@ -310,15 +310,19 @@ function is_zero_mod_ode_prob(pol, ode::ODE, x, prob = 0.99)
 end                            
 
 # -------- Function for matrix construction for Ansatz -------- #
+"""
+    build_matrix_multipoint(ode, dervs, minpoly_ord, support; info = true)
+
+This now calls the building function make_matrix in matrix_init.jl to build the matrices A and BC (only 3 blocks for now)
+See matrix_init.jl for detail on 'split_supp' and 'make_matrix'.
+
+"""
 # This function assumes that support contains the unit vectors and is sorted by `sort_gleb_max!`
-function build_matrix_multipoint(F, ode, dervs, minpoly_ord, support; info = true)
-    n = length(ode.x_vars)
-    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1)]                                    
-                                                                                                
+function build_matrix_multipoint(ode, dervs, minpoly_ord, support; info = true)
+    n = length(ode.x_vars)                                                                                                
     lsup = length(support)  
 
     ks = split_supp(support, 1)    
-
     s1, s2 = support[1:ks[1]], support[ks[1]+1:lsup]
 
     A = make_matrix(n, dervs, minpoly_ord, s1, ks[1], ks[1], true)

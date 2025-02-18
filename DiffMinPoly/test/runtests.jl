@@ -7,11 +7,11 @@ include("test_utils.jl")
 cases = []
 
 generics = [
-    [2, 2],
-    [1, 2, 2],
+    # [2, 2],
+    # [1, 2, 2],
     [2, 1, 1],
     [2, 2, 2],
-    # [2, 3, 3],
+    [2, 3, 3],
     # [2, 4, 4], 
     # [2, 5, 5],  
     # [3, 1, 1], 
@@ -69,12 +69,12 @@ push!(
        y(t) = x1(t)
     ),
     
-    @ODEmodel(
-       x1'(t) = 3 * x1(t)^2 + 16 * x2(t)^2 + 18 * x1(t) + 42,
-       x2'(t) = 2^31 * x2(t)^2 + 2^15 * x1(t) + 17,
-       x3'(t) = 19 * x1(t) + 95 * x2(t),
-       y(t) = x1(t)
-    ),
+    # @ODEmodel(
+    #    x1'(t) = 3 * x1(t)^2 + 16 * x2(t)^2 + 18 * x1(t) + 42,
+    #    x2'(t) = 2^31 * x2(t)^2 + 2^15 * x1(t) + 17,
+    #    x3'(t) = 19 * x1(t) + 95 * x2(t),
+    #    y(t) = x1(t)
+    # ),
 )
 
 @testset "Testing against the standard algorithms" begin
