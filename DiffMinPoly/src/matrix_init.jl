@@ -1,8 +1,10 @@
 """
     kernel_blocks(ls_U, ls_L) 
 
-Function that solves the kernel of the Block Lower Triangular matrix given the upper and lower block matrices 
-For now only 3 Blocks A, B, C where ls_U = A and ls_L = [B|C]
+Finds the kernel of the Block Lower Triangular matrix given the upper and lower block matrices 
+For now only 3 Blocks A, B, C where ls_U = A and ls_L = [B|C], and the whole matrix being
+A 0
+B C
 
 Generalization for more blocks will be added later.
 """
@@ -19,7 +21,7 @@ end
 """
     solve_linear_combinations(ls, sol_space, k = 0)
 
-This function solves the kernel of the input linear system ls given the constraint from the previous solution space sol_space found.
+Finds the kernel of the input linear system ls given the constraint from the previous solution space sol_space found.
 Adapted to solve for the kernel of a matrix we split into [B|C] given the split index k, e.g. the following case for only a single split in the matrix (1)
              and for the kernel of a single matrix without splitting, e.g. the case where we add rows to compensate for higher dimensional solution spaces (2)
 
@@ -133,6 +135,7 @@ The support is already ordered by sort_gleb_max!, i.e. ordered first by exponent
 To save time and space, we pass var_to_sup and supp_to_index as arguments.
 
 """
+# Gleb: I think there is also an assumption that the support contains the constant term, right?
 function evaluate_at_point(F, dervs, point, minpoly_ord, support, var_to_sup, supp_to_index)
     evals = [derv(point...) for derv in dervs]
     lsup = length(support)
