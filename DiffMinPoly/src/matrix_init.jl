@@ -1,80 +1,142 @@
 """
-    kernel_blocks(ls_U, ls_L) 
+    solve_linear_combinations(ls, sol_space, ks)
 
-Finds the kernel of the Block Lower Triangular matrix given the upper and lower block matrices 
-For now only 3 Blocks A, B, C where ls_U = A and ls_L = [B|C], and the whole matrix being
-A 0
-B C
+This function solves the kernel of the input linear system ls given the constraint from the previous solution space sol_space found.
+Adapted to solve for the kernel of a matrix we split given the split indices ks
 
-Generalization for more blocks will be added later.
+This function is used to find the kernel of all block rows in in the middle, e.g. neither the first, the last, nor the additional rows
 """
-function kernel_blocks(ls_U, ls_L) 
-    strt = time()
-    v1 = kernel(ls_U, side=:right)
+function solve_linear_combinations(ls, sol_space, ks)
+    F = base_ring(ls)
+    ls_n, ls_tot = size(ls)
+    _, sol_cols = size(sol_space)
+    
+    last_block_cols = ls_tot - ks[end]
+    
+    aug_cols = last_block_cols + sol_cols * length(ks)
+    
+    S = matrix_space(F, ls_n, aug_cols)
+    aug = zero(S)
+    
+    aug[:, 1:last_block_cols] = ls[:, (ks[end]+1):end]
+    
+    col_idx = last_block_cols + 1
+    
+    for i in 1:length(ks)
+        start_col = i > 1 ? ks[i-1] + 1 : 1
+        end_col = ks[i]
+        block_i = ls[:, start_col:end_col]
+        
+        for j in 1:sol_cols
+            v_j = sol_space[start_col:end_col, j]
+            
+            w_ij = block_i * v_j
+            aug[:, col_idx] = w_ij
+            col_idx += 1
+        end
+    end
+    
+    v = kernel(aug, side=:right)
+    
+    if size(v, 2) == 0
+        return matrix_space(F, size(sol_space, 1) + last_block_cols, 0)(zeros(F, size(sol_space, 1) + last_block_cols, 0))
+    end
+    
+    v_last = v[1:last_block_cols, :]
+    lambdas = v[(last_block_cols+1):end, :]
+    
+    ker = Matrix{eltype(sol_space)}(undef, size(sol_space, 1) + size(v_last, 1), size(lambdas, 2))
+    
+    for i in 1:size(lambdas, 2)
+        v1_lamb = sum(lambdas[j, i] .* sol_space[:, j] for j in 1:size(sol_space, 2))
+        ker[:, i] = vcat(v1_lamb, v_last[:, i])
+    end
 
-    ker = solve_linear_combinations(ls_L, v1, size(ls_U, 2))
-    @info "Linear System solved in $(time() - strt)"
-
-    return ker
+    return matrix_space(F, size(ker, 1), size(ker, 2))(ker)
 end
 
 """
-    solve_linear_combinations(ls, sol_space, k = 0)
+    solve_linear_combinations_last(ls, sol_space, k = 0)
 
-Finds the kernel of the input linear system ls given the constraint from the previous solution space sol_space found.
-Adapted to solve for the kernel of a matrix we split into [B|C] given the split index k, e.g. the following case for only a single split in the matrix (1)
+This function solves the kernel of the input linear system ls given the constraint from the previous solution space sol_space found.
+Adapted to solve for the kernel of a matrix we split given the split indices k, e.g. the following case for the last row where we split all blocks to find the final part of the kernel
              and for the kernel of a single matrix without splitting, e.g. the case where we add rows to compensate for higher dimensional solution spaces (2)
 
-Small examples:
+Small examples on small scale matrices for simplicity:
     M = [[A, 0], [B, C]]  <==> ker(M) = V such that V = [[v1], [v2]] and Av1 =  0 with Bv1 + Cv2 = 0       (1)
     if (1) gives solution space of dimension d > 1 ==> Create M' of size (d - 1, L_supp), solve with linear combinations of basis vectors in the sol_space (2)
 
 """
-function solve_linear_combinations(ls, sol_space, k = 0)
+function solve_linear_combinations_last(ls, sol_space, k = 0)
     F = base_ring(ls)
     n_temp, m_temp = size(sol_space)
     ls_n, ls_tot = size(ls)
     
-    if k > 0
-        ls_L = ls[:, 1:k]
-        ls_R = ls[:, (k+1):ls_tot]
-        ls_m = ls_tot - k
-    else
-        ls_L = ls
-        ls_R = zero(matrix_space(F, ls_n, 0))
-        ls_m = 0
-    end
-    
-    S = matrix_space(F, ls_n, ls_m + m_temp)
-    aug = zero(S)    
-    
-    if k > 0
-        aug[:, 1:ls_m] = ls_R
-    end
-    
-    for j in 1:m_temp
-        w_i = ls_L * sol_space[:, j]
-        aug[:, ls_m + j] = w_i
-    end
-    
-    v = kernel(aug, side=:right)
-    if k > 0
-        v2, lambs = v[1:ls_m,:], v[ls_m+1:ls_m + m_temp, :]
-        ker = Matrix{eltype(sol_space)}(undef, size(sol_space, 1) + size(v2, 1), size(lambs, 2))
-        for i in 1:size(lambs, 2)
-            v1_lamb = sum(lambs[j, i] .* sol_space[:, j] for j in 1:size(sol_space, 2))
-            ker[:, i] = vcat(v1_lamb, v2[:, i])
+    if typeof(k) == Vector{Int64}  # Last row with multiple splits
+        last_block_cols = ls_tot - k[end]
+        
+        aug_cols = last_block_cols + m_temp * length(k)
+        S = matrix_space(F, ls_n, aug_cols)
+        aug = zero(S)
+        
+        aug[:, 1:last_block_cols] = ls[:, (k[end]+1):end]
+        
+        col_idx = last_block_cols + 1
+        
+        for i in 1:length(k)
+            start_col = i > 1 ? k[i-1] + 1 : 1
+            end_col = k[i]
+            block_i = ls[:, start_col:end_col]
+            
+            for j in 1:m_temp
+                v_j = sol_space[start_col:end_col, j]
+                
+                w_ij = block_i * v_j
+                aug[:, col_idx] = w_ij
+                col_idx += 1
+            end
         end
-    else
+        
+        v = kernel(aug, side=:right)
+        
+        if size(v, 2) == 0
+            return matrix_space(F, size(sol_space, 1) + last_block_cols, 0)(zeros(F, size(sol_space, 1) + last_block_cols, 0))
+        end
+        
+        v_last = v[1:last_block_cols, :]
+        lambdas = v[(last_block_cols+1):end, :]
+        
+        ker = Matrix{eltype(sol_space)}(undef, size(sol_space, 1) + size(v_last, 1), size(lambdas, 2))
+        
+        for i in 1:size(lambdas, 2)
+            v1_lamb = sum(lambdas[j, i] .* sol_space[:, j] for j in 1:size(sol_space, 2))
+            ker[:, i] = vcat(v1_lamb, v_last[:, i])
+        end
+
+        
+    else  # Additional rows case (no split)
+
+        ls_L = ls
+        ls_m = 0
+        
+        S = matrix_space(F, ls_n, m_temp)
+        aug = zero(S)
+        
+        for j in 1:m_temp
+            w_i = ls_L * sol_space[:, j]
+            aug[:, j] = w_i
+        end
+        
+        v = kernel(aug, side=:right)
+        
         ker = Matrix{eltype(sol_space)}(undef, size(sol_space, 1), size(v, 2))
         for i in 1:size(v, 2)
             ker[:, i] = sum(v[j, i] .* sol_space[:, j] for j in 1:size(sol_space, 2))
         end
     end
     
-    return matrix_space(F, size(ker,1), size(ker,2))(ker)
+    return matrix_space(F, size(ker, 1), size(ker, 2))(ker)
 end
-
 
 """
     split_supp(supp, n_splits)
@@ -90,7 +152,7 @@ This will return a list containing [k1] such that support[k1] = [0, ....] and su
     ks = Int[]
     start_idx = 1
     
-    for target_ord in 0:(n_splits)
+    for target_ord in 0:(n_splits - 1)
         next_idx = findfirst(i -> supp[i][1] > target_ord, start_idx:length(supp))
         if isnothing(next_idx)
             push!(ks, length(supp))
@@ -106,25 +168,54 @@ This will return a list containing [k1] such that support[k1] = [0, ....] and su
 end
 
 """
-    generate_points(F, n_points, n_vars, set_x1 = false)
+    generate_points_base(F, n_points, n_vars, set_x1 = false)
 
 This function generates n_points random interpolation points in the field F and returns them as a vector of vectors.
 
-The set_x1 flag is used to set the first variable to a specific value, e.g. 0 or epsilon(1) for the dual number vanishing degree.
-
 """
-function generate_points(F, n_points, n_vars, set_x1 = false)
-    vecs = Vector{Vector{elem_type(F)}}(undef, n_points)
+
+function generate_points_base(F, n_points, n_vars)
+    vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
+
     for i in 1:n_points
-        vec = [rand(F) for _ in 1:(n_vars + 1)]
-        if set_x1
-            vec[1] = F(0)
-        end
+        vec = [rand(F) for _ in 1:n_vars + 1]
         vecs[i] = vec
     end
     return vecs
 end
 
+"""
+    generate_points_dual(F, n_points, n_vars, set_x1 = false)
+
+This function generates n_points random interpolation dual number points in the field F and returns them as a vector of vectors.
+
+The set_x1 flag is used to set the first variable to a specific value, e.g. 0 or epsilon(1) for the dual number vanishing degree.
+
+"""
+function generate_points_dual(F, n_points, n_vars, set_x1 = 0)
+    if set_x1 > 1
+        vecs = Vector{Vector{DiffMinPoly.DualNumber{fpFieldElem}}}(undef, n_points)
+    else
+        vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
+    end
+
+    for i in 1:n_points
+        if set_x1 > 1
+            vec = [Epsilon(set_x1, F)]
+            for _ in 1:n_vars
+                terms = [F(0) for _ in 1:set_x1]
+                terms[1] = rand(F)
+                push!(vec, DualNumber(terms, set_x1, F))
+            end
+        else
+            vec = [rand(F) for _ in 1:n_vars + 1]
+            vec[1] = F(0)
+        end
+        vecs[i] = vec
+
+    end
+    return vecs
+end
 
 """
     evaluate_at_point(F, dervs, point, minpoly_ord, support, var_to_sup, supp_to_index)
@@ -136,66 +227,65 @@ To save time and space, we pass var_to_sup and supp_to_index as arguments.
 
 """
 # Gleb: I think there is also an assumption that the support contains the constant term, right?
-function evaluate_at_point(F, dervs, point, minpoly_ord, support, var_to_sup, supp_to_index)
-    evals = [derv(point...) for derv in dervs]
-    lsup = length(support)
-    row = zeros(F, lsup)
-    row[1] = F(1)
+# Max: Yes this assumption is reflected by setting row[1] = F(1) @ line 241
+function evaluate_derivatives(F, dervs, point, minpoly_ord, var_to_sup, supp_to_index, set_x1 = false)
+    if set_x1 == 1   #Epsilon(1) = F(0) for row 1
+        evals = [derv(point...) for derv in dervs]
+        row = Dict{Int, elem_type(F)}()
 
-    for j in 1:(minpoly_ord + 1)
-        supp = var_to_sup(j)
-        if haskey(supp_to_index, supp)
-            ind = supp_to_index[supp]
-            row[ind] = evals[j]
-        end
-    end
-    
-    for i in 1:lsup
-        supp = support[i]
-        supp_divisor = copy(supp)
-        nonzero_ind = findfirst(x -> x > 0, supp_divisor)
-        
-        if nonzero_ind === nothing
-            continue
-        end
-
-
-        supp_divisor[nonzero_ind] -= 1
-        if all(x -> x == 0, supp_divisor)
-            continue
-        end
-
-        multiplier = zeros(Int, minpoly_ord + 1)
-        multiplier[nonzero_ind] += 1
-        
-        while !haskey(supp_to_index, supp_divisor) && any(x -> x > 0, supp_divisor)
-            nonzero_ind = findfirst(x -> x > 0, supp_divisor)
-            if nonzero_ind === nothing
-                break
+        for j in 1:(minpoly_ord + 1)
+            supp = var_to_sup(j)
+            if haskey(supp_to_index, supp)
+                ind = supp_to_index[supp]
+                if evals[j] isa fpMPolyRingElem
+                    a = DiffMinPoly.convert(evals[j], F)
+                else
+                    a = evals[j]
+                end
+                row[ind] = a
             end
-            supp_divisor[nonzero_ind] -= 1
-            multiplier[nonzero_ind] += 1
         end
-        
-        if !haskey(supp_to_index, supp_divisor)
-            @info "This broke: $supp_divisor"
-            error("There was something unexpected")
-            continue
-        end
-        
-        supp_div_ind = supp_to_index[supp_divisor]
-        mult_ind = get(supp_to_index, multiplier, -1)
-        
-        if mult_ind == -1
-            multiplier_eval = prod(row[2:(minpoly_ord + 2)] .^ multiplier)
-        else
-            multiplier_eval = row[mult_ind]
-        end
-        
-        row[i] = row[supp_div_ind] * multiplier_eval
-    end
+        return row, evals
     
-    return row
+    elseif set_x1 == false          #No epsilon for last row
+        evals = [derv(point...) for derv in dervs]
+
+        row = Dict{Int, elem_type(F)}()
+        row[1] = F(1)
+    
+        for j in 1:(minpoly_ord + 1)
+            supp = var_to_sup(j)
+            if haskey(supp_to_index, supp)
+                ind = supp_to_index[supp]
+                row[ind] = evals[j]
+            end
+        end
+        return row, evals
+
+    else                        #All other rows i with epsilon(i)
+        evals = [derv(point) for derv in dervs]
+        row = Dict{Int, Vector{elem_type(F)}}()
+        temp = [F(0) for _ in 1:length(evals)]
+        temp[1] = F(1)
+        row[1] = temp
+    
+        e = Array{Any}(undef, length(evals))
+        for i in 1:length(evals)
+            a = get_terms(evals[i])
+            e[i] = a
+        end
+
+        for j in 1:(minpoly_ord + 1)
+            supp = var_to_sup(j)
+            if haskey(supp_to_index, supp)
+                ind = supp_to_index[supp]
+                row[ind] = e[j]
+            end
+        end
+        return row, e
+    end
+
+
 end
 
 """
@@ -205,6 +295,7 @@ Creates and fills the block matrix M of size (length(support), mat_m).
 The support is the reordered and/or reduced support containing only the relevant support vectors for the block in question.
 dervs are the derivatives we pass as argument to evaluate_at_point and fill the matrix wrt their position in the support.
 minpoly_ord is the order of the minimal polynomial.
+set_x1 is a flag signaling which row we are handling and the vanish degree of the dual number used for that row
 
 This function is essentially the part outside the for loop that would set up the everything necessary before evaluating and 
 filling in the original build_matrix_multipoint.
@@ -212,24 +303,190 @@ filling in the original build_matrix_multipoint.
 Inside the following for loop, we now call a function evaluate_at_point that creates the respective row for some point and set it to be the row of M.
 
 """
-function fill_matrix(points, dervs, minpoly_ord, support, mat_m)  
+function fill_matrix(points, dervs, minpoly_ord, support, mat_m, set_x1 = false)
     F = base_ring(parent(dervs[end]))
     support = [Vector{Int64}(p) for p in support]
     mat_n = length(points)
-    
-    S = matrix_space(F, mat_n, mat_m)
-    M = zero(S)
-    
+   
+    M = Array{Any}(undef, mat_n, mat_m)
+
+    for i in 1:mat_n
+        if set_x1 == 1 || set_x1 == false
+            M[i, 1] = F(1)
+        else
+            term = [F(0) for _  in 1:set_x1]
+            term[1] = F(1)
+            M[i, 1] = DiffMinPoly.DualNumber(term, set_x1, F)
+        end
+    end
+   
     supp_to_index = Dict(s => i for (i, s) in enumerate(support))
     var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1:(minpoly_ord + 1)]
-    
-    for i in 1:mat_n
-        row = evaluate_at_point(F, dervs, points[i], minpoly_ord, support, var_to_sup, supp_to_index)
-        M[i, :] = row
-    end
-    return M
-end
 
+    row_dict, evals = evaluate_derivatives(F, dervs, points[1], minpoly_ord, var_to_sup, supp_to_index, set_x1)
+
+    if set_x1 != false && set_x1 > 1
+        rows_data = Dict{Int, Tuple{Dict{Int64, Vector{fpFieldElem}}, Vector{Vector{elem_type(F)}}}}()   # Middle block rows
+    else
+        rows_data = Dict{Int, Tuple{Dict{Int, elem_type(F)}, Vector{elem_type(F)}}}()  # First and Last Block Rows
+    end
+
+    rows_data[1] = (row_dict, evals)
+      
+    for (j, val) in row_dict
+        M[1, j] = val
+    end
+
+    str = time()
+   
+    for i in 2:mat_n
+        row_dict, evals = evaluate_derivatives(F, dervs, points[i], minpoly_ord, var_to_sup, supp_to_index, set_x1)
+
+        rows_data[i] = (row_dict, evals)
+       
+        for (j, val) in row_dict
+            M[i, j] = val
+        end
+    end
+
+    println("Derivatives Evaluated in $(time() - str)")
+
+    str = time()
+    
+    if set_x1 != false
+        for i in 1:mat_m
+
+            supp = support[i]
+            supp_divisor = copy(supp)
+            nonzero_ind = findfirst(x -> x > 0, supp_divisor)
+           
+            if nonzero_ind === nothing
+                continue
+            end
+            supp_divisor[nonzero_ind] -= 1
+            if all(x -> x == 0, supp_divisor)
+                continue
+            end
+            multiplier = zeros(Int, minpoly_ord + 1)
+            multiplier[nonzero_ind] += 1
+           
+            while !haskey(supp_to_index, supp_divisor) && any(x -> x > 0, supp_divisor)
+                nonzero_ind = findfirst(x -> x > 0, supp_divisor)
+                if nonzero_ind === nothing
+                    break
+                end
+                supp_divisor[nonzero_ind] -= 1
+                multiplier[nonzero_ind] += 1
+            end
+           
+            if !haskey(supp_to_index, supp_divisor)
+                error("Unexpected situation: divisor not found in support")
+            end
+           
+            supp_div_ind = supp_to_index[supp_divisor]
+            mult_ind = get(supp_to_index, multiplier, -1)
+           
+            for j in 1:mat_n
+                row_dict, evals = rows_data[j]
+
+                if mult_ind == -1
+                    if evals isa Vector{fpFieldElem}
+                        multiplier_eval = prod(evals .^ multiplier)
+                    else
+                        term = [F(0) for _ in 1:set_x1]
+                        term[1] = F(1)
+                        multiplier_eval = DiffMinPoly.DualNumber(term, set_x1, F)
+                        for i in 1:length(evals)
+                            term = evals[i]
+                            e = DiffMinPoly.DualNumber(term, set_x1, F)
+                            multiplier_eval = multiplier_eval * e ^ multiplier[i]
+                        end
+                    end
+                else
+                    multiplier_eval = M[j, mult_ind]
+                end
+               
+                if multiplier_eval isa fpFieldElem
+                    term = multiplier_eval * M[j, supp_div_ind]
+                else
+                    if multiplier_eval isa DiffMinPoly.DualNumber{fpFieldElem}
+                        a = DualNumber(M[j, supp_div_ind], set_x1, F)
+                        term = a * multiplier_eval
+                    else
+                        a, b = DualNumber(M[j, supp_div_ind], set_x1, F), DualNumber(multiplier_eval, set_x1, F)
+                        term = a * b
+                    end
+                    term = get_terms(term)
+                end
+                M[j, i] = term
+            end
+        end
+
+        if !(M[1, 1] isa fpFieldElem)
+            for i in 1:mat_n
+                for j in 1:mat_m
+                    M[i, j] = M[i, j][end]
+                end
+            end
+        end
+        
+        S = matrix_space(F, mat_n, mat_m)
+
+        println("Matrix filled in $(time() - str)")
+        return S(M)
+    else
+                                    # No DualNumbers
+        for i in 1:mat_m
+            supp = support[i]
+            supp_divisor = copy(supp)
+            nonzero_ind = findfirst(x -> x > 0, supp_divisor)
+           
+            if nonzero_ind === nothing
+                continue
+            end
+            supp_divisor[nonzero_ind] -= 1
+            if all(x -> x == 0, supp_divisor)
+                continue
+            end
+            multiplier = zeros(Int, minpoly_ord + 1)
+            multiplier[nonzero_ind] += 1
+           
+            while !haskey(supp_to_index, supp_divisor) && any(x -> x > 0, supp_divisor)
+                nonzero_ind = findfirst(x -> x > 0, supp_divisor)
+                if nonzero_ind === nothing
+                    break
+                end
+                supp_divisor[nonzero_ind] -= 1
+                multiplier[nonzero_ind] += 1
+            end
+           
+            if !haskey(supp_to_index, supp_divisor)
+                error("Unexpected situation: divisor not found in support")
+            end
+           
+            supp_div_ind = supp_to_index[supp_divisor]
+            mult_ind = get(supp_to_index, multiplier, -1)
+           
+            for j in 1:mat_n
+                row_dict, evals = rows_data[j]
+               
+                if mult_ind == -1
+                    multiplier_eval = prod(evals .^ multiplier)
+                else
+                    multiplier_eval = M[j, mult_ind]
+                end
+
+                M[j, i] = M[j, supp_div_ind] * multiplier_eval
+            end
+        end
+       
+        S = matrix_space(F, mat_n, mat_m)
+        println("Matrix filled in $(time() - str)")
+
+        return S(M)    
+        
+    end
+end
 
 """
     make_matrix(n_vars, dervs, minpoly_ord, support, mat_n, mat_m, set_x1 = false)
@@ -241,8 +498,12 @@ set_x1 is a flag to determine wether x1 should have a specific value, e.g. for n
 
 This will be extended to allow setting x1 = epsilon(2) and build the rectangular matrices shaping the Block Lower Triangular matrix.
 """
-function make_matrix(n_vars, dervs, minpoly_ord, support, mat_n, mat_m, set_x1 = false)
+function make_matrix(n_vars, dervs, minpoly_ord, support, mat_n, mat_m; set_x1 = false)
     F = base_ring(parent(dervs[end]))
-    points = generate_points(F, mat_n, n_vars, set_x1)
-    return fill_matrix(points, dervs, minpoly_ord, support, mat_m)
+    if set_x1 == false
+        points = generate_points_base(F, mat_n, n_vars)
+    else
+        points = generate_points_dual(F, mat_n, n_vars, set_x1)
+    end
+    return fill_matrix(points, dervs, minpoly_ord, support, mat_m, set_x1)
 end

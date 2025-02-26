@@ -63,22 +63,82 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
     tim2 = @elapsed dervs = lie_derivatives(ord, ode_mod_p, x_mod_p)
     info && @info "Computing Derivatives in: $(tim2)"
 
-    tim2 = @elapsed ls_U, ls_L = build_matrix_multipoint(ode_mod_p, dervs, ord, possible_supp, info = info)
-                                                                    
-    info && @info "Building Linear System in: $(tim2)"
+    high_deg = possible_supp[end][1]
 
-    info && @info "Linear Systems with dims $(size(ls_U)) and $(size(ls_L))"
+    info && @info "Highest degree of x1 in the support is $high_deg"
 
-    ker = kernel_blocks(ls_U, ls_L)
+    # Due to the Linear Combination and agmented matrix approach, the solution space grows very rapidly at each line (factorially).
+    # Systematically using high_deg - 1 as the number of split is very greedy for 2 reasons:
+                # - The lower in the matrix rows you go, the bigger the list representing the dual numbers' coefficients and thus the slower it get_terms
+                # - Due to the linear combinations approach, at each new step we get a bigger solution space:
+                        # Solving for additional rows in the middle of the loop solving the big system isn't efficient and is inaccurate.
+                        # Solving for additional rows at the end is tricky as the solution space grows in r! with r the line number - 1
+
+    # For example in the [2, 1, 1] dense system case ahs highest degree of x1 = 8. 
+    # Thus 7 splits gives 8 rows and therefore the before last line has solution space 7! = 5040 
+    # With an initial support of only 271, finding the kernel of the (5039, 271) additional rows is entirely pointless as an optimization.
+
+    # For now, maximum split is set to 5 since 5! = 120 solution space, giving 119 additional rows isn't especially huge to compute.
+
+    if high_deg >= 3 && high_deg <= 6                                   
+        ks = split_supp(possible_supp, 3)
+    elseif high_deg >= 6
+        ks = split_supp(possible_supp, 5)  
+    else
+        ks = split_supp(possible_supp, high_deg)  # Could never be 0 since high_deg >= 2 
+    end
+
+    info && @info "Splitting at indices $ks for System of size $l"
+
+    for i in 1:length(ks) + 1
+        if i > length(ks)
+            supp = possible_supp
+        else
+            supp = possible_supp[1:ks[i]]
+        end
+
+        if 1 < i && i <= length(ks)         # Neither first nor last
+            n_rows = ks[i] - ks[i - 1]      
+        elseif 1 < i                        # Last row case
+            n_rows = l - ks[i - 1]
+        else                                # First row case (i == 1)
+            n_rows = ks[i]
+        end
+
+        println("Row $i is $((n_rows/l)*100)% of Total Linear System")
+
+        strt = time()
+        if i > length(ks)                   # Allows to build only each block row one by one to not overload memory.
+            ls = build_matrix_multipoint(ode_mod_p, dervs, ord, supp, n_rows, info = info)    # Last Block row
+        else
+            ls = build_matrix_multipoint(ode_mod_p, dervs, ord, supp, n_rows, vanish_deg = Integer(i), info = info)   # All other block rows
+        end    
+        println("Time to build row matrix $i: ", time() - strt)
+
+        strt = time()
+        if i == 1
+            ker = kernel(ls, side=:right)     #First row
+        elseif i <= length(ks)
+            ker = solve_linear_combinations(ls, ker, ks[1:i-1])  # All subsequent rectangular blocks
+        else
+            ker = solve_linear_combinations_last(ls, ker, ks)              #Last row
+        end
+        println("Time to compute kernel for row $i: ", time() - strt)
+        dim = size(ker)[2]
+        info && @info "The dimension of the $i th solution space is $(dim)"
     
+    end
+                                                                    
     dim = size(ker)[2]
     info && @info "The dimension of the solution space is $(dim)"
     if dim > 1
         info && @info "Adding $(dim-1) rows to compensate for loss"
         strt = time()
         E = make_matrix(n, dervs, ord, possible_supp, dim - 1, l)
-        ker = solve_linear_combinations(E, ker)
-        info && @info "Additional rows added and reduced solution space computed in $(time() - strt)"
+        info && @info "Additional rows added in $(time() - strt)"
+        strt = time()
+        ker = solve_linear_combinations_last(E, ker)
+        info && @info "Reduced solution space computed in $(time() - strt)"
         dim = size(ker, 2)
         info && @info "The dimension of the new solution space is $(dim)"
     end
@@ -213,7 +273,7 @@ function rand_poly(deg, vars)
                 for i in 1:length(vars)
                     monom *= vars[i]^m[i]
                 end
-               result += rand(1:20) * monom
+               result += rand(1:2) * monom
             end
         end
 
@@ -318,17 +378,13 @@ See matrix_init.jl for detail on 'split_supp' and 'make_matrix'.
 
 """
 # This function assumes that support contains the unit vectors and is sorted by `sort_gleb_max!`
-function build_matrix_multipoint(ode, dervs, minpoly_ord, support; info = true)
+function build_matrix_multipoint(ode, dervs, minpoly_ord, support, n_rows; vanish_deg = false, info = true)
     n = length(ode.x_vars)                                                                                                
     lsup = length(support)  
 
-    ks = split_supp(support, 1)    
-    s1, s2 = support[1:ks[1]], support[ks[1]+1:lsup]
+    A = make_matrix(n, dervs, minpoly_ord, support, n_rows, lsup, set_x1 = vanish_deg)
 
-    A = make_matrix(n, dervs, minpoly_ord, s1, ks[1], ks[1], true)
-    BC = make_matrix(n, dervs, minpoly_ord, support, lsup - ks[1], lsup)
-
-    return A, BC
+    return A
 end
 
 # -------- Auxiliary Functions -------- #
