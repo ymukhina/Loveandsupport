@@ -20,8 +20,6 @@ function eliminate(ode::ODE, x, prob = 0.99)
                                                                            
     @assert x in ode.x_vars
     minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, rand(2^25:2^32 - 1))
-
-    # add a comment
                                                                                                                 
     check = min_pol -> begin
         if isone(prob)
@@ -32,6 +30,7 @@ function eliminate(ode::ODE, x, prob = 0.99)
     end
     
     while check(minimal_poly) == false
+        @info "Incorrect minimal polynomial. Running Love & Support again (T_T)"
         starting_prime = Hecke.next_prime(starting_prime)
         minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, starting_prime)
     end
@@ -61,26 +60,102 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
     l = length(possible_supp)
     info && @info "The size of the estimates support is $(length(possible_supp))"
 
-    tim2 = @elapsed ls = build_matrix_multipoint(F, ode_mod_p, x_mod_p, ord, possible_supp, info = info)
-                                                                    
-    info && @info "eval method $(tim2)"
+    tim2 = @elapsed dervs = lie_derivatives(ord, ode_mod_p, x_mod_p)
+    info && @info "Computing Derivatives in: $(tim2)"
 
-    info && @info "linear system dims $(size(ls))"
+    high_deg = possible_supp[end][1]
+
+    info && @info "Highest degree of x1 in the support is $high_deg"
+
+    # Due to the Linear Combination and agmented matrix approach, the solution space grows very rapidly at each line (factorially).
+    # Systematically using high_deg - 1 as the number of split is very greedy for 2 reasons:
+                # - The lower in the matrix rows you go, the bigger the list representing the dual numbers' coefficients and thus the slower it get_terms
+                # - Due to the linear combinations approach, at each new step we get a bigger solution space:
+                        # Solving for additional rows in the middle of the loop solving the big system isn't efficient and is inaccurate.
+                        # Solving for additional rows at the end is tricky as the solution space grows in r! with r the line number - 1
+
+    # For example in the [2, 1, 1] dense system case ahs highest degree of x1 = 8. 
+    # Thus 7 splits gives 8 rows and therefore the before last line has solution space 7! = 5040 
+    # With an initial support of only 271, finding the kernel of the (5039, 271) additional rows is entirely pointless as an optimization.
+
+    # For now, maximum split is set to 5 since 5! = 120 solution space, giving 119 additional rows isn't especially huge to compute.
+
+    # if high_deg >= 3 && high_deg <= 6                                   
+    #     ks = split_supp(possible_supp, 3)
+    # elseif high_deg >= 6
+    #     ks = split_supp(possible_supp, 5)  
+    # else
+    #     ks = split_supp(possible_supp, high_deg)  # Could never be 0 since high_deg >= 2 
+    # end
+
+    ks = split_supp(possible_supp, high_deg - 1) 
+
+    info && @info "Splitting at indices $ks for System of size $l"
+
+    for i in 1:length(ks) + 1
+        if i > length(ks)
+            supp = possible_supp
+        else
+            supp = possible_supp[1:ks[i]]
+        end
+
+        if 1 < i && i <= length(ks)         # Neither first nor last
+            n_rows = ks[i] - ks[i - 1]      
+        elseif 1 < i                        # Last row case
+            n_rows = l - ks[i - 1]
+        else                                # First row case (i == 1)
+            n_rows = ks[i]
+        end
+
+        if n_rows == 0
+            n_rows = 1
+        end
+
+        println("Row $i is $((n_rows/l)*100)% of Total Linear System")
+
+        strt = time()
+        if i > length(ks)                   # Allows to build only each block row one by one to not overload memory.
+            ls = build_matrix_multipoint(ode_mod_p, dervs, ord, supp, n_rows, info = info)    # Last Block row
+        else
+            ls = build_matrix_multipoint(ode_mod_p, dervs, ord, supp, n_rows, vanish_deg = Integer(i), info = info)   # All other block rows
+        end    
+        println("Time to build row matrix $i: ", time() - strt)
+
+        strt = time()
+        if i == 1
+            ker = kernel(ls, side=:right)     #First row
+        elseif i <= length(ks)
+            ker = solve_linear_combinations(ls, ker, ks[i - 1])  # All subsequent rectangular blocks
+        else
+            ker = solve_linear_combinations_last(ls, ker, ks)              #Last row
+        end
+        println("Time to compute kernel for row $i: ", time() - strt)
+        dim = size(ker)[2]
+        info && @info "The dimension of the $i th solution space is $(dim)"
     
-    system_soltime = @elapsed ker = kernel(ls, side=:right)
-    info && @info "Linear system solved in $system_soltime"
+    end
+                                                                    
     dim = size(ker)[2]
     info && @info "The dimension of the solution space is $(dim)"
+    if dim > 1
+        info && @info "Adding $(dim-1) rows to compensate for loss"
+        strt = time()
+        E = make_matrix(n, dervs, ord, possible_supp, dim - 1, l)
+        info && @info "Additional rows added in $(time() - strt)"
+        strt = time()
+        ker = solve_linear_combinations_last(E, ker)
+        info && @info "Reduced solution space computed in $(time() - strt)"
+        dim = size(ker, 2)
+        info && @info "The dimension of the new solution space is $(dim)"
+    end
 
-    start_constructing_time = time()
-
+    strt = time()
     R, _ = polynomial_ring(F, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:ord]...])
             
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
-    
     g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
-       
-    info && @info "The resulting polynomial computes in $(time() - start_constructing_time)"
+    
+    info && @info "The resulting polynomial computes in $(time() - strt)"
 
     return g * (1 // Oscar.leading_coefficient(g))
 end
@@ -204,7 +279,7 @@ function rand_poly(deg, vars)
                 for i in 1:length(vars)
                     monom *= vars[i]^m[i]
                 end
-               result += rand(1:20) * monom
+               result += rand(1:2) * monom
             end
         end
 
@@ -263,7 +338,7 @@ function f_min_support(ode::ODE, x, jacobian_rank::Int; info = true)
         A = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
         b = vcat(ineq_rhs, zeros(QQ, n + 1))
     end
-    return sort_gleb!(collect(lattice_points(Oscar.polyhedron(A, b))))
+    return sort_gleb_max!(collect(lattice_points(Oscar.polyhedron(A, b))))
 end
 
 # -------- Functions for test of correctness -------- #
@@ -301,63 +376,21 @@ function is_zero_mod_ode_prob(pol, ode::ODE, x, prob = 0.99)
 end                            
 
 # -------- Function for matrix construction for Ansatz -------- #
+"""
+    build_matrix_multipoint(ode, dervs, minpoly_ord, support; info = true)
 
-# This function assumes that support contains the unit vectors and is sorted by `sort_gleb!`
-function build_matrix_multipoint(F, ode, x, minpoly_ord, support; info = true)
-    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1) ]                                           
-    n = length(ode.x_vars)
-    @info "computing derivatives"
-    dervs = lie_derivatives(minpoly_ord, ode, x)
-    @info "done"
+This now calls the building function make_matrix in matrix_init.jl to build the matrices A and BC (only 3 blocks for now)
+See matrix_init.jl for detail on 'split_supp' and 'make_matrix'.
 
-    support = [Vector{Int64}(p) for p in support]
-    
-    lsup = length(support)                                                    
-    S = matrix_space(F, lsup, lsup)
-    M = zero(S)
-    supp_to_index = Dict(s => i for (i, s) in enumerate(support))
+"""
+# This function assumes that support contains the unit vectors and is sorted by `sort_gleb_max!`
+function build_matrix_multipoint(ode, dervs, minpoly_ord, support, n_rows; vanish_deg = false, info = true)
+    n = length(ode.x_vars)                                                                                                
+    lsup = length(support)  
 
-    # filling the columns corresponding to the derivatives
-    for i in 1:lsup
-        M[i, 1] = 1
-        vec = [rand(F) for _ in 1:(n + 1) ]                                      
-        evals = [derv(vec...) for derv in dervs]
-        
-        
-        for j in 1:(minpoly_ord + 1)
-            supp = var_to_sup(j)
-            ind = supp_to_index[supp]
-            M[i, ind] = evals[j]
-        end
-    end
+    A = make_matrix(n, dervs, minpoly_ord, support, n_rows, lsup, set_x1 = vanish_deg)
 
-    # filling the rest of the columns
-    for i in (minpoly_ord + 3):lsup
-        supp = support[i]
-        supp_divisor = copy(supp)
-        nonzero_ind = findfirst(x -> x > 0, supp_divisor)
-        supp_divisor[nonzero_ind] -= 1                                                 
-        multiplier = zeros(Int, minpoly_ord + 1)
-        multiplier[nonzero_ind] += 1
-        while !haskey(supp_to_index, supp_divisor)
-            nonzero_ind = findfirst(x -> x > 0, supp_divisor)
-            supp_divisor[nonzero_ind] -= 1
-            multiplier[nonzero_ind] += 1
-        end                                                    
-        
-        supp_div_ind = supp_to_index[supp_divisor]
-        mult_ind = get(supp_to_index, multiplier, -1)
-        for j in 1:lsup
-            if mult_ind == -1
-                multiplier_eval = prod(M[j, 2:(minpoly_ord + 2)] .^ multiplier)
-            else
-                multiplier_eval = M[j, mult_ind]
-            end
-            M[j, i] = M[j, supp_div_ind] * multiplier_eval           
-        end
-    end
-      
-  return M
+    return A
 end
 
 # -------- Auxiliary Functions -------- #
@@ -378,14 +411,13 @@ function qq_to_mod(a::QQFieldElem, p)
 end
 
 
-# One would suggest to hit the road...
 function add_unit!(supp, jacobian_rank)
     l_supp = length(supp)
     for j in 1:(jacobian_rank + 2)         
         unit = [i == j ? one(ZZ) : zero(ZZ) for i in 1:(jacobian_rank + 1)] 
         !(unit in supp) && push!(supp, point_vector(ZZ, unit))  
     end                                                                                                                           
-    l_supp < length(supp) && sort_gleb!(supp)
+    l_supp < length(supp) && sort_gleb_max!(supp)
     return supp 
 end                                                                                                                        
 
@@ -409,5 +441,10 @@ end
 function sort_gleb!(exp_vectors::Vector{PointVector{ZZRingElem}})
     sort!(exp_vectors, by = s -> [sum(s), s[end:-1:1]...])
 end
+
+function sort_gleb_max!(exp_vectors::Vector{PointVector{ZZRingElem}})
+    sort!(exp_vectors, by = s -> (s[1], sum(s), s[end:-1:1]...))
+end
+
 
 # ————————————————— #
