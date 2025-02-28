@@ -55,24 +55,24 @@ function check_ansatz(ode::ODE)
     @info "time: $(tim) seconds"
    
 
-    # @info "Solving without love and support :("
-    # tim = @elapsed io_correct = first(values(find_ioequations(ode)))
-    # io_correct *= (Oscar.leading_coefficient(io_correct)^(-1))
-    # @info "time: $(tim) seconds"
+    @info "Solving without love and support :("
+    tim = @elapsed io_correct = first(values(find_ioequations(ode)))
+    io_correct *= (Oscar.leading_coefficient(io_correct)^(-1))
+    @info "time: $(tim) seconds"
    
 
-    # R = parent(io_tocheck)
-    # S = parent(io_correct)
+    R = parent(io_tocheck)
+    S = parent(io_correct)
         
-    # n = ngens(R) 
+    n = ngens(R) 
   
-    # svnames = (string).(S.S)
-    # y_index = findfirst(vname -> vname == "y(t)_0", svnames)
-    # ys = gens(S)[y_index:y_index+(n-1)]
-    # @info "IO variables $(ys)"    
+    svnames = (string).(S.S)
+    y_index = findfirst(vname -> vname == "y(t)_0", svnames)
+    ys = gens(S)[y_index:y_index+(n-1)]
+    @info "IO variables $(ys)"    
 
-    # phi = hom(R, S, ys)
-    # quot, rem = divrem(phi(io_tocheck), io_correct)
-    # return iszero(rem) && iszero(total_degree(quot))
+    phi = hom(R, S, ys)
+    quot, rem = divrem(phi(io_tocheck), io_correct)
+    return iszero(rem) && iszero(total_degree(quot))
 end
         

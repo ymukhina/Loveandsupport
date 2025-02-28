@@ -6,24 +6,63 @@ Adapted to solve for the kernel of a matrix we split given the split indices ks
 
 This function is used to find the kernel of all block rows in in the middle, e.g. neither the first, the last, nor the additional rows
 """
-function solve_linear_combinations(ls, sol_space, ks)
+function solve_linear_combinations(ls, sol_space, ks=nothing)
     F = base_ring(ls)
     ls_n, ls_tot = size(ls)
     _, sol_cols = size(sol_space)
-
-    last_block_cols = ls_tot - ks
     
-    aug_cols = last_block_cols + sol_cols
+    if ks === nothing        # First row
+        S = matrix_space(F, ls_n, sol_cols)
+        aug = zero(S)
+        
+        for j in 1:sol_cols
+            aug[:, j] = ls * sol_space[:, j]
+        end
+        
+        v = kernel(aug, side=:right)
+        
+        ker = Matrix{eltype(sol_space)}(undef, size(sol_space, 1), size(v, 2))
+        for i in 1:size(v, 2)
+            ker[:, i] = sum(v[j, i] .* sol_space[:, j] for j in 1:sol_cols)
+        end
+        
+        return matrix_space(F, size(ker, 1), size(ker, 2))(ker)
+    end
     
-    S = matrix_space(F, ls_n, aug_cols)
-    aug = zero(S)
+    if isa(ks, Vector)       # Last row
+        last_block_cols = ls_tot - ks[end]
+        
+        aug_cols = last_block_cols + sol_cols * length(ks)
+        S = matrix_space(F, ls_n, aug_cols)
+        aug = zero(S)
+        
+        aug[:, 1:last_block_cols] = ls[:, (ks[end]+1):end]
+        
+        col_idx = last_block_cols + 1
+        
+        for i in 1:length(ks)
+            start_col = i > 1 ? ks[i-1] + 1 : 1
+            end_col = ks[i]
+            block_i = ls[:, start_col:end_col]
+            
+            for j in 1:sol_cols
+                v_j = sol_space[start_col:end_col, j]
+                aug[:, col_idx] = block_i * v_j
+                col_idx += 1
+            end
+        end
+    else                                # Middle rows
+        last_block_cols = ls_tot - ks
+        
+        aug_cols = last_block_cols + sol_cols
+        S = matrix_space(F, ls_n, aug_cols)
+        aug = zero(S)
+        
+        aug[:, 1:last_block_cols] = ls[:, (ks+1):end]
+        
+        aug[:, last_block_cols+1:end] = ls[:, 1:ks] * sol_space
+    end
     
-    aug[:, 1:last_block_cols] = ls[:, (ks+1):end]        
-    
-
-    w = ls[:, 1:ks]*sol_space
-    aug[:, last_block_cols+1:end] = w
-
     v = kernel(aug, side=:right)
     
     if size(v, 2) == 0
@@ -39,92 +78,10 @@ function solve_linear_combinations(ls, sol_space, ks)
         v1_lamb = sum(lambdas[j, i] .* sol_space[:, j] for j in 1:size(sol_space, 2))
         ker[:, i] = vcat(v1_lamb, v_last[:, i])
     end
-
-    return matrix_space(F, size(ker, 1), size(ker, 2))(ker)
-end
-
-"""
-    solve_linear_combinations_last(ls, sol_space, k = 0)
-
-This function solves the kernel of the input linear system ls given the constraint from the previous solution space sol_space found.
-Adapted to solve for the kernel of a matrix we split given the split indices k, e.g. the following case for the last row where we split all blocks to find the final part of the kernel
-             and for the kernel of a single matrix without splitting, e.g. the case where we add rows to compensate for higher dimensional solution spaces (2)
-
-Small examples on small scale matrices for simplicity:
-    M = [[A, 0], [B, C]]  <==> ker(M) = V such that V = [[v1], [v2]] and Av1 =  0 with Bv1 + Cv2 = 0       (1)
-    if (1) gives solution space of dimension d > 1 ==> Create M' of size (d - 1, L_supp), solve with linear combinations of basis vectors in the sol_space (2)
-
-"""
-function solve_linear_combinations_last(ls, sol_space, k = 0)
-    F = base_ring(ls)
-    n_temp, m_temp = size(sol_space)
-    ls_n, ls_tot = size(ls)
-    
-    if typeof(k) == Vector{Int64}  # Last row with multiple splits
-        last_block_cols = ls_tot - k[end]
-        
-        aug_cols = last_block_cols + m_temp * length(k)
-        S = matrix_space(F, ls_n, aug_cols)
-        aug = zero(S)
-        
-        aug[:, 1:last_block_cols] = ls[:, (k[end]+1):end]
-        
-        col_idx = last_block_cols + 1
-        
-        for i in 1:length(k)
-            start_col = i > 1 ? k[i-1] + 1 : 1
-            end_col = k[i]
-            block_i = ls[:, start_col:end_col]
-            
-            for j in 1:m_temp
-                v_j = sol_space[start_col:end_col, j]
-                
-                w_ij = block_i * v_j
-                aug[:, col_idx] = w_ij
-                col_idx += 1
-            end
-        end
-        
-        v = kernel(aug, side=:right)
-        
-        if size(v, 2) == 0
-            return matrix_space(F, size(sol_space, 1) + last_block_cols, 0)(zeros(F, size(sol_space, 1) + last_block_cols, 0))
-        end
-        
-        v_last = v[1:last_block_cols, :]
-        lambdas = v[(last_block_cols+1):end, :]
-        
-        ker = Matrix{eltype(sol_space)}(undef, size(sol_space, 1) + size(v_last, 1), size(lambdas, 2))
-        
-        for i in 1:size(lambdas, 2)
-            v1_lamb = sum(lambdas[j, i] .* sol_space[:, j] for j in 1:size(sol_space, 2))
-            ker[:, i] = vcat(v1_lamb, v_last[:, i])
-        end
-
-        
-    else  # Additional rows case (no split)
-
-        ls_L = ls
-        ls_m = 0
-        
-        S = matrix_space(F, ls_n, m_temp)
-        aug = zero(S)
-        
-        for j in 1:m_temp
-            w_i = ls_L * sol_space[:, j]
-            aug[:, j] = w_i
-        end
-        
-        v = kernel(aug, side=:right)
-        
-        ker = Matrix{eltype(sol_space)}(undef, size(sol_space, 1), size(v, 2))
-        for i in 1:size(v, 2)
-            ker[:, i] = sum(v[j, i] .* sol_space[:, j] for j in 1:size(sol_space, 2))
-        end
-    end
     
     return matrix_space(F, size(ker, 1), size(ker, 2))(ker)
 end
+
 
 """
     split_supp(supp, n_splits)

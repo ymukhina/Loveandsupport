@@ -129,7 +129,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
         elseif i <= length(ks)
             ker = solve_linear_combinations(ls, ker, ks[i - 1])  # All subsequent rectangular blocks
         else
-            ker = solve_linear_combinations_last(ls, ker, ks)              #Last row
+            ker = solve_linear_combinations(ls, ker, ks)              #Last row
         end
         t = time() - strt
         solve_ker += t
@@ -147,7 +147,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
         E = make_matrix(n, dervs, ord, possible_supp, dim - 1, l)
         info && @info "Additional rows added in $(time() - strt)"
         strt = time()
-        ker = solve_linear_combinations_last(E, ker)
+        ker = solve_linear_combinations(E, ker)
         t = time() - strt
         solve_ker += t
         info && @info "Reduced solution space computed in $t"
