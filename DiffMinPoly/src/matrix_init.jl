@@ -10,32 +10,20 @@ function solve_linear_combinations(ls, sol_space, ks)
     F = base_ring(ls)
     ls_n, ls_tot = size(ls)
     _, sol_cols = size(sol_space)
+
+    last_block_cols = ls_tot - ks
     
-    last_block_cols = ls_tot - ks[end]
-    
-    aug_cols = last_block_cols + sol_cols * length(ks)
+    aug_cols = last_block_cols + sol_cols
     
     S = matrix_space(F, ls_n, aug_cols)
     aug = zero(S)
     
-    aug[:, 1:last_block_cols] = ls[:, (ks[end]+1):end]
+    aug[:, 1:last_block_cols] = ls[:, (ks+1):end]        
     
-    col_idx = last_block_cols + 1
-    
-    for i in 1:length(ks)
-        start_col = i > 1 ? ks[i-1] + 1 : 1
-        end_col = ks[i]
-        block_i = ls[:, start_col:end_col]
-        
-        for j in 1:sol_cols
-            v_j = sol_space[start_col:end_col, j]
-            
-            w_ij = block_i * v_j
-            aug[:, col_idx] = w_ij
-            col_idx += 1
-        end
-    end
-    
+
+    w = ls[:, 1:ks]*sol_space
+    aug[:, last_block_cols+1:end] = w
+
     v = kernel(aug, side=:right)
     
     if size(v, 2) == 0
@@ -289,7 +277,7 @@ function evaluate_derivatives(F, dervs, point, minpoly_ord, var_to_sup, supp_to_
 end
 
 """
-    fill_matrix(points, dervs, minpoly_ord, support, mat_m)
+    fill_matrix(points, dervs, minpoly_ord, support, mat_m, set_x1)
 
 Creates and fills the block matrix M of size (length(support), mat_m).
 The support is the reordered and/or reduced support containing only the relevant support vectors for the block in question.

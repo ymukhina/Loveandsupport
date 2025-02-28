@@ -80,13 +80,15 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
 
     # For now, maximum split is set to 5 since 5! = 120 solution space, giving 119 additional rows isn't especially huge to compute.
 
-    if high_deg >= 3 && high_deg <= 6                                   
-        ks = split_supp(possible_supp, 3)
-    elseif high_deg >= 6
-        ks = split_supp(possible_supp, 5)  
-    else
-        ks = split_supp(possible_supp, high_deg)  # Could never be 0 since high_deg >= 2 
-    end
+    # if high_deg >= 3 && high_deg <= 6                                   
+    #     ks = split_supp(possible_supp, 3)
+    # elseif high_deg >= 6
+    #     ks = split_supp(possible_supp, 5)  
+    # else
+    #     ks = split_supp(possible_supp, high_deg)  # Could never be 0 since high_deg >= 2 
+    # end
+
+    ks = split_supp(possible_supp, high_deg - 1) 
 
     info && @info "Splitting at indices $ks for System of size $l"
 
@@ -105,6 +107,10 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
             n_rows = ks[i]
         end
 
+        if n_rows == 0
+            n_rows = 1
+        end
+
         println("Row $i is $((n_rows/l)*100)% of Total Linear System")
 
         strt = time()
@@ -119,7 +125,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
         if i == 1
             ker = kernel(ls, side=:right)     #First row
         elseif i <= length(ks)
-            ker = solve_linear_combinations(ls, ker, ks[1:i-1])  # All subsequent rectangular blocks
+            ker = solve_linear_combinations(ls, ker, ks[i - 1])  # All subsequent rectangular blocks
         else
             ker = solve_linear_combinations_last(ls, ker, ks)              #Last row
         end
