@@ -213,11 +213,19 @@ end
 
 
 
-function (f::fpMPolyRingElem)(args::Vector{DiffMinPoly.DualNumber{fpFieldElem}})
+function (f::fpMPolyRingElem)(args::Vector{DiffMinPoly.DualNumber{fpFieldElem}}, isolate_var)
     if !isa(args[1], DualNumber)
         throw(ArgumentError("First argument must be a DualNumber"))
     end
     
+    isolate_var_exps = collect(exponent_vectors(isolate_var))
+    isolate_var_coeffs = [coeff(f, i) for i in 1:length(isolate_var_exps)]
+
+    # println(isolate_var_exps)
+    # println(isolate_var_coeffs)
+    # println("#####")
+    # error("STOPOPOP")
+
     result = zero(parent(f))
     
     exps = collect(exponent_vectors(f))

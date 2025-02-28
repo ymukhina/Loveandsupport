@@ -92,6 +92,8 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
 
     info && @info "Splitting at indices $ks for System of size $l"
 
+    solve_ker = 0
+
     for i in 1:length(ks) + 1
         if i > length(ks)
             supp = possible_supp
@@ -119,7 +121,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
         else
             ls = build_matrix_multipoint(ode_mod_p, dervs, ord, supp, n_rows, vanish_deg = Integer(i), info = info)   # All other block rows
         end    
-        println("Time to build row matrix $i: ", time() - strt)
+        # println("Time to build row matrix $i: ", time() - strt)
 
         strt = time()
         if i == 1
@@ -129,7 +131,9 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
         else
             ker = solve_linear_combinations_last(ls, ker, ks)              #Last row
         end
-        println("Time to compute kernel for row $i: ", time() - strt)
+        t = time() - strt
+        solve_ker += t
+        # println("Time to compute kernel for row $i: ", t)
         dim = size(ker)[2]
         info && @info "The dimension of the $i th solution space is $(dim)"
     
@@ -144,11 +148,13 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
         info && @info "Additional rows added in $(time() - strt)"
         strt = time()
         ker = solve_linear_combinations_last(E, ker)
-        info && @info "Reduced solution space computed in $(time() - strt)"
+        t = time() - strt
+        solve_ker += t
+        info && @info "Reduced solution space computed in $t"
         dim = size(ker, 2)
         info && @info "The dimension of the new solution space is $(dim)"
     end
-
+    info && @info "Kernel computation took $solve_ker"
     strt = time()
     R, _ = polynomial_ring(F, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:ord]...])
             

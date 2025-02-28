@@ -217,63 +217,28 @@ To save time and space, we pass var_to_sup and supp_to_index as arguments.
 # Gleb: I think there is also an assumption that the support contains the constant term, right?
 # Max: Yes this assumption is reflected by setting row[1] = F(1) @ line 241
 function evaluate_derivatives(F, dervs, point, minpoly_ord, var_to_sup, supp_to_index, set_x1 = false)
-    if set_x1 == 1   #Epsilon(1) = F(0) for row 1
+    n_vars = length(point)
+    isolate_var = dervs[1]
+
+    if set_x1 == 1   # Epsilon(1) = F(0) for row 1
         evals = [derv(point...) for derv in dervs]
-        row = Dict{Int, elem_type(F)}()
-
-        for j in 1:(minpoly_ord + 1)
-            supp = var_to_sup(j)
-            if haskey(supp_to_index, supp)
-                ind = supp_to_index[supp]
-                if evals[j] isa fpMPolyRingElem
-                    a = DiffMinPoly.convert(evals[j], F)
-                else
-                    a = evals[j]
-                end
-                row[ind] = a
-            end
-        end
-        return row, evals
+        return evals
     
-    elseif set_x1 == false          #No epsilon for last row
+    elseif set_x1 == false   # No epsilon for last row
         evals = [derv(point...) for derv in dervs]
+        return evals
 
-        row = Dict{Int, elem_type(F)}()
-        row[1] = F(1)
-    
-        for j in 1:(minpoly_ord + 1)
-            supp = var_to_sup(j)
-            if haskey(supp_to_index, supp)
-                ind = supp_to_index[supp]
-                row[ind] = evals[j]
-            end
-        end
-        return row, evals
-
-    else                        #All other rows i with epsilon(i)
-        evals = [derv(point) for derv in dervs]
-        row = Dict{Int, Vector{elem_type(F)}}()
-        temp = [F(0) for _ in 1:length(evals)]
-        temp[1] = F(1)
-        row[1] = temp
-    
+    else   # All other rows i with epsilon(i)
+        evals = [derv(point, isolate_var) for derv in dervs]
+        
         e = Array{Any}(undef, length(evals))
         for i in 1:length(evals)
             a = get_terms(evals[i])
             e[i] = a
         end
-
-        for j in 1:(minpoly_ord + 1)
-            supp = var_to_sup(j)
-            if haskey(supp_to_index, supp)
-                ind = supp_to_index[supp]
-                row[ind] = e[j]
-            end
-        end
-        return row, e
+        
+        return e
     end
-
-
 end
 
 """
@@ -304,46 +269,53 @@ function fill_matrix(points, dervs, minpoly_ord, support, mat_m, set_x1 = false)
         else
             term = [F(0) for _  in 1:set_x1]
             term[1] = F(1)
-            M[i, 1] = DiffMinPoly.DualNumber(term, set_x1, F)
+            M[i, 1] = term
         end
     end
    
     supp_to_index = Dict(s => i for (i, s) in enumerate(support))
     var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1:(minpoly_ord + 1)]
 
-    row_dict, evals = evaluate_derivatives(F, dervs, points[1], minpoly_ord, var_to_sup, supp_to_index, set_x1)
+    evals = evaluate_derivatives(F, dervs, points[1], minpoly_ord, var_to_sup, supp_to_index, set_x1)
 
     if set_x1 != false && set_x1 > 1
-        rows_data = Dict{Int, Tuple{Dict{Int64, Vector{fpFieldElem}}, Vector{Vector{elem_type(F)}}}}()   # Middle block rows
+        evals_data = Dict{Int, Vector{Vector{elem_type(F)}}}()  # Middle block rows with dual numbers
     else
-        rows_data = Dict{Int, Tuple{Dict{Int, elem_type(F)}, Vector{elem_type(F)}}}()  # First and Last Block Rows
+        evals_data = Dict{Int, Vector{elem_type(F)}}()  # First and Last Block Rows
     end
 
-    rows_data[1] = (row_dict, evals)
+    evals_data[1] = evals
       
-    for (j, val) in row_dict
-        M[1, j] = val
+    for j in 1:(minpoly_ord + 1)
+        supp = var_to_sup(j)
+        if haskey(supp_to_index, supp)
+            ind = supp_to_index[supp]
+            M[1, ind] = evals[j]
+        end
     end
 
     str = time()
    
     for i in 2:mat_n
-        row_dict, evals = evaluate_derivatives(F, dervs, points[i], minpoly_ord, var_to_sup, supp_to_index, set_x1)
-
-        rows_data[i] = (row_dict, evals)
-       
-        for (j, val) in row_dict
-            M[i, j] = val
+        evals = evaluate_derivatives(F, dervs, points[i], minpoly_ord, var_to_sup, supp_to_index, set_x1)
+        evals_data[i] = evals
+        
+        for j in 1:(minpoly_ord + 1)
+            supp = var_to_sup(j)
+            if haskey(supp_to_index, supp)
+                ind = supp_to_index[supp]
+                M[i, ind] = evals[j]
+            end
         end
     end
 
-    println("Derivatives Evaluated in $(time() - str)")
+    # println("Derivatives Evaluated in $(time() - str)")
 
     str = time()
     
     if set_x1 != false
+        # Blocks with dual numbers
         for i in 1:mat_m
-
             supp = support[i]
             supp_divisor = copy(supp)
             nonzero_ind = findfirst(x -> x > 0, supp_divisor)
@@ -375,7 +347,7 @@ function fill_matrix(points, dervs, minpoly_ord, support, mat_m, set_x1 = false)
             mult_ind = get(supp_to_index, multiplier, -1)
            
             for j in 1:mat_n
-                row_dict, evals = rows_data[j]
+                evals = evals_data[j]
 
                 if mult_ind == -1
                     if evals isa Vector{fpFieldElem}
@@ -384,10 +356,10 @@ function fill_matrix(points, dervs, minpoly_ord, support, mat_m, set_x1 = false)
                         term = [F(0) for _ in 1:set_x1]
                         term[1] = F(1)
                         multiplier_eval = DiffMinPoly.DualNumber(term, set_x1, F)
-                        for i in 1:length(evals)
-                            term = evals[i]
+                        for k in 1:length(evals)
+                            term = evals[k]
                             e = DiffMinPoly.DualNumber(term, set_x1, F)
-                            multiplier_eval = multiplier_eval * e ^ multiplier[i]
+                            multiplier_eval = multiplier_eval * e ^ multiplier[k]
                         end
                     end
                 else
@@ -420,10 +392,10 @@ function fill_matrix(points, dervs, minpoly_ord, support, mat_m, set_x1 = false)
         
         S = matrix_space(F, mat_n, mat_m)
 
-        println("Matrix filled in $(time() - str)")
+        # println("Matrix filled in $(time() - str)")
         return S(M)
     else
-                                    # No DualNumbers
+        # No DualNumbers case
         for i in 1:mat_m
             supp = support[i]
             supp_divisor = copy(supp)
@@ -456,7 +428,7 @@ function fill_matrix(points, dervs, minpoly_ord, support, mat_m, set_x1 = false)
             mult_ind = get(supp_to_index, multiplier, -1)
            
             for j in 1:mat_n
-                row_dict, evals = rows_data[j]
+                evals = evals_data[j]
                
                 if mult_ind == -1
                     multiplier_eval = prod(evals .^ multiplier)
@@ -469,10 +441,9 @@ function fill_matrix(points, dervs, minpoly_ord, support, mat_m, set_x1 = false)
         end
        
         S = matrix_space(F, mat_n, mat_m)
-        println("Matrix filled in $(time() - str)")
+        # println("Matrix filled in $(time() - str)")
 
         return S(M)    
-        
     end
 end
 
