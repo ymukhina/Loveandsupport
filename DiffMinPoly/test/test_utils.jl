@@ -50,15 +50,15 @@ function check_ansatz(ode::ODE)
         
     x = first(sort(ode.x_vars, rev = true))    
 
-    @info "Solving with love and support!"
+    @info "Solving with Love & Support!"
     tim = @elapsed io_tocheck = DiffMinPoly.eliminate(ode, x)
-    @info "time: $(tim) seconds"
+    @info "Time: $(tim) seconds"
    
 
-    @info "Solving without love and support :("
+    @info "Solving without Love & Support :("
     tim = @elapsed io_correct = first(values(find_ioequations(ode)))
     io_correct *= (Oscar.leading_coefficient(io_correct)^(-1))
-    @info "time: $(tim) seconds"
+    @info "Time: $(tim) seconds"
    
 
     R = parent(io_tocheck)
