@@ -3,6 +3,7 @@ using Oscar
 struct DualNumber{T}
     poly::fpMPolyRingElem
     vanishing_degree::Integer
+    # Gleb: I think that the ground field can be deduced from `base_ring` of the polynomial
     field::Any
 
     function DualNumber{T}(poly::fpMPolyRingElem, vanishing_degree::Integer, field=nothing) where T
@@ -49,6 +50,7 @@ function Epsilon(vanishing_degree::Integer, field=nothing)
 end
 
 function get_terms(d::DualNumber{T}) where T
+    # Gleb: I think you can do this with a single list comprehension or using `coefficinents` function
     terms = Vector{T}(undef, d.vanishing_degree)
     
     for i in 0:(d.vanishing_degree-1)
@@ -59,6 +61,7 @@ function get_terms(d::DualNumber{T}) where T
     return terms
 end
 
+# Gleb: there is a special function for truncation https://nemocas.github.io/AbstractAlgebra.jl/stable/polynomial/#Base.truncate-Tuple{PolyRingElem,%20Int64}
 function truncate_poly(poly::fpMPolyRingElem, vanishing_degree::Integer)
     R = parent(poly)
     result = R(0)

@@ -18,8 +18,10 @@ function solve_linear_combinations(ls, sol_space, ks=nothing)
         
         if size(v, 2) > 0
             ker = sol_space * v
+            # Gleb: why do you do this `matrix_space` construction?
             return matrix_space(F, size(ker, 1), size(ker, 2))(ker)
         else
+            # Gleb: there is a `zero_matrix` function you could use here https://nemocas.github.io/AbstractAlgebra.jl/stable/matrix/
             return matrix_space(F, size(sol_space, 1), 0)(zeros(F, size(sol_space, 1), 0))
         end
     end
@@ -43,7 +45,8 @@ function solve_linear_combinations(ls, sol_space, ks=nothing)
    
     sol_result = sol_space * lambdas
     ker = vcat(sol_result, v_last)
-   
+
+    # Gleb: is this necessary? I believe that vcat of FpMatrices is again of the same type
     return matrix_space(F, size(ker, 1), size(ker, 2))(ker)
 end
 
