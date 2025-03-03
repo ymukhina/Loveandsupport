@@ -67,32 +67,12 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
 
     info && @info "Highest degree of x1 in the support is $high_deg"
 
-    # Due to the Linear Combination and agmented matrix approach, the solution space grows very rapidly at each line (factorially).
-    # Systematically using high_deg - 1 as the number of split is very greedy for 2 reasons:
-                # - The lower in the matrix rows you go, the bigger the list representing the dual numbers' coefficients and thus the slower it get_terms
-                # - Due to the linear combinations approach, at each new step we get a bigger solution space:
-                        # Solving for additional rows in the middle of the loop solving the big system isn't efficient and is inaccurate.
-                        # Solving for additional rows at the end is tricky as the solution space grows in r! with r the line number - 1
-
-    # For example in the [2, 1, 1] dense system case ahs highest degree of x1 = 8. 
-    # Thus 7 splits gives 8 rows and therefore the before last line has solution space 7! = 5040 
-    # With an initial support of only 271, finding the kernel of the (5039, 271) additional rows is entirely pointless as an optimization.
-
-    # For now, maximum split is set to 5 since 5! = 120 solution space, giving 119 additional rows isn't especially huge to compute.
-
-    # if high_deg >= 3 && high_deg <= 6                                   
-    #     ks = split_supp(possible_supp, 3)
-    # elseif high_deg >= 6
-    #     ks = split_supp(possible_supp, 5)  
-    # else
-    #     ks = split_supp(possible_supp, high_deg)  # Could never be 0 since high_deg >= 2 
-    # end
-
     ks = split_supp(possible_supp, high_deg - 1) 
 
     info && @info "Splitting at indices $ks for System of size $l"
 
     solve_ker = 0
+    build_mat = 0
 
     for i in 1:length(ks) + 1
         if i > length(ks)
@@ -112,16 +92,15 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
         if n_rows == 0
             n_rows = 1
         end
-
-        println("Row $i is $((n_rows/l)*100)% of Total Linear System")
-
+        # println("Row $i is $((n_rows/l)*100)% of Total Linear System")
         strt = time()
         if i > length(ks)                   # Allows to build only each block row one by one to not overload memory.
-            ls = build_matrix_multipoint(ode_mod_p, dervs, ord, supp, n_rows, info = info)    # Last Block row
+            ls = build_matrix_multipoint(n, dervs, ord, supp, n_rows, info = info)    # Last Block row
         else
-            ls = build_matrix_multipoint(ode_mod_p, dervs, ord, supp, n_rows, vanish_deg = Integer(i), info = info)   # All other block rows
+            ls = build_matrix_multipoint(n, dervs, ord, supp, n_rows, vanish_deg = Integer(i), info = info)   # All other block rows
         end    
-        # println("Time to build row matrix $i: ", time() - strt)
+        t = time() - strt
+        build_mat += t
 
         strt = time()
         if i == 1
@@ -133,7 +112,6 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
         end
         t = time() - strt
         solve_ker += t
-        # println("Time to compute kernel for row $i: ", t)
         dim = size(ker)[2]
         info && @info "The dimension of the $i th solution space is $(dim)"
     
@@ -144,7 +122,9 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
     if dim > 1
         info && @info "Adding $(dim-1) rows to compensate for loss"
         strt = time()
-        E = make_matrix(n, dervs, ord, possible_supp, dim - 1, l)
+        E = build_matrix_multipoint(n, dervs, ord, possible_supp, dim-1, info = info)
+        t = time() - strt
+        build_mat += t
         info && @info "Additional rows added in $(time() - strt)"
         strt = time()
         ker = solve_linear_combinations(E, ker)
@@ -154,6 +134,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
         dim = size(ker, 2)
         info && @info "The dimension of the new solution space is $(dim)"
     end
+    info && @info "Matrix building took $build_mat"
     info && @info "Kernel computation took $solve_ker"
     strt = time()
     R, _ = polynomial_ring(F, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:ord]...])
@@ -163,7 +144,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
     
     info && @info "The resulting polynomial computes in $(time() - strt)"
 
-    return g * (1 // Oscar.leading_coefficient(g))
+    return g * (1 // Oscar.leading_coefficient(g)), build_mat, solve_ker
 end
 
 
@@ -188,6 +169,7 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
     crts = zeros(ZZ, l_supp)
     found_cand = falses(l_supp)
     is_stable = falses(l_supp)
+    ker_t, mat_t = 0, 0
     
     is_first_prime = true
     while !all(is_stable)
@@ -199,9 +181,10 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
         prim_cnt += 1
         
         @info "Chose $prim_cnt th prime $p, $(length(findall(is_stable))) stable coefficients"
-        sol_mod_p = eliminate_with_love_and_support_modp(ode, x, Int(p), minpoly_ord, possible_supp)  
+        sol_mod_p, k_t, m_t = eliminate_with_love_and_support_modp(ode, x, Int(p), minpoly_ord, possible_supp)  
 
-
+        ker_t += k_t
+        mat_t += m_t
 
         if is_first_prime
             # starting_prime = 65519
@@ -260,6 +243,9 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
 
         prod_of_done_primes *= p
     end 
+
+    @info "Overall Matrix Building: $mat_t"
+    @info "Overall Kernel Computation: $ker_t"
     
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
     g = sum([s * m for (s, m) in zip(sol_vector, mons)])
@@ -382,21 +368,163 @@ function is_zero_mod_ode_prob(pol, ode::ODE, x, prob = 0.99)
 end                            
 
 # -------- Function for matrix construction for Ansatz -------- #
-"""
-    build_matrix_multipoint(ode, dervs, minpoly_ord, support; info = true)
-
-This now calls the building function make_matrix in matrix_init.jl to build the matrices A and BC (only 3 blocks for now)
-See matrix_init.jl for detail on 'split_supp' and 'make_matrix'.
-
-"""
 # This function assumes that support contains the unit vectors and is sorted by `sort_gleb_max!`
-function build_matrix_multipoint(ode, dervs, minpoly_ord, support, n_rows; vanish_deg = false, info = true)
-    n = length(ode.x_vars)                                                                                                
-    lsup = length(support)  
+function build_matrix_multipoint(n, dervs, minpoly_ord, support, n_rows; vanish_deg = false, info = true)
+    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1) ]                                           
+    F = base_ring(parent(dervs[end]))
 
-    A = make_matrix(n, dervs, minpoly_ord, support, n_rows, lsup, set_x1 = vanish_deg)
+    support = [Vector{Int64}(p) for p in support]
+    
+    lsup = length(support)       
 
-    return A
+    M = Array{Any}(undef, n_rows, lsup)
+
+    supp_to_index = Dict(s => i for (i, s) in enumerate(support))
+
+    if vanish_deg == false
+        points = generate_points_base(F, n_rows, n)
+    else
+        points = generate_points_dual(F, n_rows, n, vanish_deg)
+    end
+
+    # filling the columns corresponding to the derivatives
+    for i in 1:n_rows
+        if vanish_deg == 1 || vanish_deg == false
+            M[i, 1] = F(1)
+        else
+            term = [F(0) for _  in 1:vanish_deg]
+            term[1] = F(1)
+            M[i, 1] = term
+        end
+
+        evals = evaluate_derivatives(dervs, points[i], vanish_deg)
+        
+        
+        for j in 1:(minpoly_ord + 1)
+            supp = var_to_sup(j)
+            if haskey(supp_to_index, supp)
+                ind = supp_to_index[supp]
+                M[i, ind] = evals[j]
+            end
+        end
+    end
+
+    # filling the rest of the columns
+    if vanish_deg != false
+        for i in 1:lsup
+            supp = support[i]
+            supp_divisor = copy(supp)
+            nonzero_ind = findfirst(x -> x > 0, supp_divisor)
+            if nonzero_ind === nothing
+                continue
+            end
+    
+            supp_divisor[nonzero_ind] -= 1
+            if all(x -> x == 0, supp_divisor)
+                continue
+            end
+    
+            multiplier = zeros(Int, minpoly_ord + 1)
+            multiplier[nonzero_ind] += 1
+            while !haskey(supp_to_index, supp_divisor)
+                nonzero_ind = findfirst(x -> x > 0, supp_divisor)
+                if nonzero_ind === nothing
+                    break
+                end
+                supp_divisor[nonzero_ind] -= 1
+                multiplier[nonzero_ind] += 1
+            end             
+            
+            if !haskey(supp_to_index, supp_divisor)
+                error("Unexpected situation: divisor not found in support")
+            end
+            
+            supp_div_ind = supp_to_index[supp_divisor]
+            mult_ind = get(supp_to_index, multiplier, -1)
+    
+            for j in 1:n_rows
+                if mult_ind == -1
+                    println("PROBLEM")
+                    multiplier_eval = prod(M[j, 2:(minpoly_ord + 2)] .^ multiplier)
+                else
+                    multiplier_eval = M[j, mult_ind]
+                end
+               
+                if multiplier_eval isa fpFieldElem
+                    term = multiplier_eval * M[j, supp_div_ind]
+                else
+                    if multiplier_eval isa DiffMinPoly.DualNumber{fpFieldElem}
+                        a = DualNumber(M[j, supp_div_ind], vanish_deg, F)
+                        term = a * multiplier_eval
+                    else
+                        a, b = DualNumber(M[j, supp_div_ind], vanish_deg, F), DualNumber(multiplier_eval, vanish_deg, F)
+                        term = a * b
+                    end
+                    term = get_terms(term)
+                end
+                M[j, i] = term
+            end
+        end
+
+        if !(M[1, 1] isa fpFieldElem)
+            for i in 1:n_rows
+                for j in 1:lsup
+                    M[i, j] = M[i, j][end]
+                end
+            end
+        end
+        
+        S = matrix_space(F, n_rows, lsup)
+          
+        return S(M)
+
+    else
+        for i in 1:lsup
+            supp = support[i]
+            supp_divisor = copy(supp)
+            nonzero_ind = findfirst(x -> x > 0, supp_divisor)
+            if nonzero_ind === nothing
+                continue
+            end
+    
+            supp_divisor[nonzero_ind] -= 1
+            if all(x -> x == 0, supp_divisor)
+                continue
+            end
+    
+            multiplier = zeros(Int, minpoly_ord + 1)
+            multiplier[nonzero_ind] += 1
+            while !haskey(supp_to_index, supp_divisor)
+                nonzero_ind = findfirst(x -> x > 0, supp_divisor)
+                if nonzero_ind === nothing
+                    break
+                end
+                supp_divisor[nonzero_ind] -= 1
+                multiplier[nonzero_ind] += 1
+            end             
+            
+            if !haskey(supp_to_index, supp_divisor)
+                error("Unexpected situation: divisor not found in support")
+            end
+            
+            supp_div_ind = supp_to_index[supp_divisor]
+            mult_ind = get(supp_to_index, multiplier, -1)
+    
+            for j in 1:n_rows
+                if mult_ind == -1
+                    println("BIGPROBLEM")
+                    multiplier_eval = prod(M[j, 2:(minpoly_ord + 2)] .^ multiplier)
+                else
+                    multiplier_eval = M[j, mult_ind]
+                end
+                M[j, i] = M[j, supp_div_ind] * multiplier_eval           
+            end
+        end
+
+        S = matrix_space(F, n_rows, lsup)
+
+        return S(M)  
+    end  
 end
 
 # -------- Auxiliary Functions -------- #
