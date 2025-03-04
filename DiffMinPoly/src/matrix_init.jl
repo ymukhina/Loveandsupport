@@ -18,11 +18,9 @@ function solve_linear_combinations(ls, sol_space, ks=nothing)
         
         if size(v, 2) > 0
             ker = sol_space * v
-            # Gleb: why do you do this `matrix_space` construction?
-            return matrix_space(F, size(ker, 1), size(ker, 2))(ker)
+            return ker
         else
-            # Gleb: there is a `zero_matrix` function you could use here https://nemocas.github.io/AbstractAlgebra.jl/stable/matrix/
-            return matrix_space(F, size(sol_space, 1), 0)(zeros(F, size(sol_space, 1), 0))
+            return zero_matrix(F, size(sol_space, 1), 0)
         end
     end
    
@@ -37,7 +35,7 @@ function solve_linear_combinations(ls, sol_space, ks=nothing)
     v = kernel(aug, side=:right)
    
     if size(v, 2) == 0
-        return matrix_space(F, size(sol_space, 1) + last_block_cols, 0)(zeros(F, size(sol_space, 1) + last_block_cols, 0))
+        return zero_matrix(F, size(sol_space, 1) + last_block_cols, 0)
     end
    
     v_last = v[1:last_block_cols, :]
@@ -46,8 +44,7 @@ function solve_linear_combinations(ls, sol_space, ks=nothing)
     sol_result = sol_space * lambdas
     ker = vcat(sol_result, v_last)
 
-    # Gleb: is this necessary? I believe that vcat of FpMatrices is again of the same type
-    return matrix_space(F, size(ker, 1), size(ker, 2))(ker)
+    return ker
 end
 
 """
@@ -105,26 +102,27 @@ The set_x1 flag is used to set the first variable to a specific value, e.g. 0 or
 
 """
 function generate_points_dual(F, n_points, n_vars, set_x1 = 0)
+    R, _ = polynomial_ring(F, "ε")
+
     if set_x1 > 1
-        vecs = Vector{Vector{DiffMinPoly.DualNumber{fpFieldElem}}}(undef, n_points)
+        vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
     else
         vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
     end
 
     for i in 1:n_points
         if set_x1 > 1
-            vec = [Epsilon(set_x1, F)]
+            vec = [Epsilon(Int(set_x1), F)]
+            
             for _ in 1:n_vars
-                terms = [F(0) for _ in 1:set_x1]
-                terms[1] = rand(F)
-                push!(vec, DualNumber(terms, set_x1, F))
+                dual_poly = R(rand(F))
+                push!(vec, DualNumber{fpFieldElem}(dual_poly, set_x1))
             end
         else
             vec = [rand(F) for _ in 1:n_vars + 1]
             vec[1] = F(0)
         end
         vecs[i] = vec
-
     end
     return vecs
 end
@@ -140,7 +138,6 @@ set_x1 is a flag signaling the vanishing degree of the dual number
 # Gleb: I think there is also an assumption that the support contains the constant term, right?
 # Max: Yes, this assumption is reflected by setting row[1] = F(1) 
 function evaluate_derivatives(dervs, point, set_x1 = false)
-    n_vars = length(point)
     isolate_var = dervs[1]
 
     if set_x1 == 1   # Epsilon(1) = F(0) for row 1
@@ -151,16 +148,11 @@ function evaluate_derivatives(dervs, point, set_x1 = false)
         evals = [derv(point...) for derv in dervs]
         return evals
 
-    else   # All other rows i with epsilon(i)
-        evals = [derv(point, isolate_var) for derv in dervs]
+    else   # All other rows with different vanishing degrees
+        dual_point = [p isa DualNumber ? p : point[1] for p in point]
         
-        e = Array{Any}(undef, length(evals))
-        for i in 1:length(evals)
-            a = get_terms(evals[i])
-            e[i] = a
-        end
+        evals = [derv(dual_point) for derv in dervs]
         
-        return e
+        return evals
     end
 end
-

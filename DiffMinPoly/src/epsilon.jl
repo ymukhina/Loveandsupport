@@ -1,210 +1,137 @@
 using Oscar
 
 struct DualNumber{T}
-    poly::fpMPolyRingElem
+    poly::fpPolyRingElem
     vanishing_degree::Integer
-    # Gleb: I think that the ground field can be deduced from `base_ring` of the polynomial
-    field::Any
 
-    function DualNumber{T}(poly::fpMPolyRingElem, vanishing_degree::Integer, field=nothing) where T
-        if isnothing(field)
-            throw(ArgumentError("Field must be provided for polynomial-based DualNumber"))
-        end
-        new{T}(poly, vanishing_degree, field)
+    function DualNumber{T}(poly::fpPolyRingElem, vanishing_degree::Integer) where T
+        new{T}(poly, vanishing_degree)
     end
 
-    function DualNumber(terms::Vector{T}, vanishing_degree::Integer, field=nothing) where T
-        if isnothing(field)
-            throw(ArgumentError("Field must be provided for polynomial-based DualNumber"))
-        end
-        
-        R, (ε,) = polynomial_ring(field, ["ε"])
-        
-        poly = R(0)
-        for (i, coef) in enumerate(terms)
-            if i <= vanishing_degree && coef != field(0)
-                poly += coef * ε^(i-1)
-            end
-        end
-        
-        new{T}(poly, vanishing_degree, field)
+    function DualNumber{T}(poly::fpFieldElem, vanishing_degree::Integer) where T
+        F = parent(poly)
+        R, _ = polynomial_ring(F, "ε")
+        new{T}(R(poly), vanishing_degree)
     end
 end
-
 
 # ------------------------------ Dual Number Utils ------------------------------
 
-function Epsilon(vanishing_degree::Integer, field=nothing)
-    if vanishing_degree < 1
-        throw(ArgumentError("Vanishing degree must be positive"))
-    end
-    if isnothing(field)
-        throw(ArgumentError("Field must be provided for polynomial-based DualNumber"))
-    end
-    
-    R, (ε,) = polynomial_ring(field, ["ε"])
-    
-    poly = ε
-    
-    return DualNumber{fpFieldElem}(poly, vanishing_degree, field)
+function Epsilon(vanishing_degree::Integer, field::fpField)
+    vanishing_degree < 1 && throw(ArgumentError("Vanishing degree must be positive"))
+    R, ε = polynomial_ring(field, "ε")
+    return DualNumber{fpFieldElem}(R(ε), vanishing_degree)
 end
 
-function get_terms(d::DualNumber{T}) where T
-    # Gleb: I think you can do this with a single list comprehension or using `coefficinents` function
-    terms = Vector{T}(undef, d.vanishing_degree)
-    
-    for i in 0:(d.vanishing_degree-1)
-        c = coeff(d.poly, [i])
-        terms[i+1] = c
-    end
-    
-    return terms
+function truncate_poly(poly::fpPolyRingElem, vanishing_degree::Integer)
+    return truncate(poly, vanishing_degree)
 end
 
-# Gleb: there is a special function for truncation https://nemocas.github.io/AbstractAlgebra.jl/stable/polynomial/#Base.truncate-Tuple{PolyRingElem,%20Int64}
-function truncate_poly(poly::fpMPolyRingElem, vanishing_degree::Integer)
-    R = parent(poly)
-    result = R(0)
-
-    exps = collect(exponent_vectors(poly))
-    coeffs = [coeff(poly, i) for i in 1:length(exps)]
-    
-    for (c, e) in zip(coeffs, exps)
-        if e[1] < vanishing_degree
-            result += c * gen(R, 1)^e[1]
-        end
+function convert_to_field(x::fpPolyRingElem)::fpFieldElem
+    if iszero(x)
+        return base_ring(x)(0)
     end
-    
-    return result
-end
-
-function convert_to_field(x::fpMPolyRingElem, F::fpField)::fpFieldElem
-    if x == 0
-        return F(0)
-    end
-
-    exps = collect(exponent_vectors(x))
-
-    if isempty(exps) || (length(exps) == 1 && all(e -> e == 0, exps[1]))
-        a = constant_coefficient(x)
-        return a
+    if degree(x) == 0
+        return coeff(x, 0)
     else
         throw(ArgumentError("Cannot convert non-constant polynomial to field element"))
     end
 end
 
 # ------------------------------ Dual Number Math ------------------------------
+
 Base.:*(a::DualNumber{T}, b::DualNumber{T}) where T = begin
     degree = min(a.vanishing_degree, b.vanishing_degree)
     result_poly = truncate_poly(a.poly * b.poly, degree)
-    return DualNumber{T}(result_poly, degree, a.field)
+    return DualNumber{T}(result_poly, degree)
 end
 
 Base.:+(a::DualNumber{T}, b::DualNumber{T}) where T = begin
     degree = min(a.vanishing_degree, b.vanishing_degree)
     result_poly = truncate_poly(a.poly + b.poly, degree)
-    return DualNumber{T}(result_poly, degree, a.field)
+    return DualNumber{T}(result_poly, degree)
 end
 
 Base.:-(a::DualNumber{T}, b::DualNumber{T}) where T = begin
     degree = min(a.vanishing_degree, b.vanishing_degree)
     result_poly = truncate_poly(a.poly - b.poly, degree)
-    return DualNumber{T}(result_poly, degree, a.field)
+    return DualNumber{T}(result_poly, degree)
 end
 
 Base.:-(a::DualNumber{T}) where T = begin
     result_poly = -a.poly
-    return DualNumber{T}(result_poly, a.vanishing_degree, a.field)
+    return DualNumber{T}(result_poly, a.vanishing_degree)
 end
 
 Base.:^(a::DualNumber{T}, n::Integer) where T = begin
     if n == 0
         R = parent(a.poly)
-        return DualNumber{T}(R(1), a.vanishing_degree, a.field)
+        return DualNumber{T}(R(1), a.vanishing_degree)
     elseif n == 1
         return a
     end
-    
     result_poly = truncate_poly(a.poly^n, a.vanishing_degree)
-    return DualNumber{T}(result_poly, a.vanishing_degree, a.field)
+    return DualNumber{T}(result_poly, a.vanishing_degree)
 end
 
-Base.:*(a::DualNumber{T}, b::fpMPolyRingElem) where T = begin
-    if !isnothing(a.field)
-        b_converted = convert_to_field(b, a.field)
-        result_poly = truncate_poly(a.poly * b_converted, a.vanishing_degree)
-        return DualNumber{T}(result_poly, a.vanishing_degree, a.field)
-    end
-    throw(ArgumentError("Cannot multiply DualNumber without field with polynomial"))
+Base.:*(a::DualNumber{T}, b::fpFieldElem) where T = begin
+    result_poly = truncate_poly(a.poly * b, a.vanishing_degree)
+    return DualNumber{T}(result_poly, a.vanishing_degree)
 end
 
-Base.:*(b::fpMPolyRingElem, a::DualNumber{T}) where T = begin
-    return a * b
-end
+Base.:*(b::fpFieldElem, a::DualNumber{T}) where T = a * b
 
 Base.:*(a::DualNumber{T}, b::Any) where T = begin
     result_poly = truncate_poly(a.poly * b, a.vanishing_degree)
-    return DualNumber{T}(result_poly, a.vanishing_degree, a.field)
+    return DualNumber{T}(result_poly, a.vanishing_degree)
 end
 
-Base.:*(b::Any, a::DualNumber{T}) where T = begin
-    return a * b
+Base.:*(b::Any, a::DualNumber{T}) where T = a * b
+
+Base.:+(a::DualNumber{T}, b::fpFieldElem) where T = begin
+    R = parent(a.poly)
+    result_poly = truncate_poly(a.poly + R(b), a.vanishing_degree)
+    return DualNumber{T}(result_poly, a.vanishing_degree)
 end
 
-Base.:+(a::DualNumber{T}, b::fpMPolyRingElem) where T = begin
-    if !isnothing(a.field)
-        b_converted = convert_to_field(b, a.field)
-        R = parent(a.poly)
-        result_poly = truncate_poly(a.poly + R(b_converted), a.vanishing_degree)
-        return DualNumber{T}(result_poly, a.vanishing_degree, a.field)
-    end
-    throw(ArgumentError("Cannot add DualNumber without field with polynomial"))
-end
-
-Base.:+(b::fpMPolyRingElem, a::DualNumber{T}) where T = begin
-    return a + b
-end
+Base.:+(b::fpFieldElem, a::DualNumber{T}) where T = a + b
 
 Base.:+(a::DualNumber{T}, b::Any) where T = begin
     R = parent(a.poly)
     result_poly = truncate_poly(a.poly + R(b), a.vanishing_degree)
-    return DualNumber{T}(result_poly, a.vanishing_degree, a.field)
+    return DualNumber{T}(result_poly, a.vanishing_degree)
 end
 
-Base.:+(b::Any, a::DualNumber{T}) where T = begin
-    return a + b
+Base.:+(b::Any, a::DualNumber{T}) where T = a + b
+
+Base.:-(a::DualNumber{T}, b::fpFieldElem) where T = begin
+    R = parent(a.poly)
+    result_poly = truncate_poly(a.poly - R(b), a.vanishing_degree)
+    return DualNumber{T}(result_poly, a.vanishing_degree)
 end
 
-Base.:-(a::DualNumber{T}, b::fpMPolyRingElem) where T = begin
-    if !isnothing(a.field)
-        b_converted = convert_to_field(b, a.field)
-        R = parent(a.poly)
-        result_poly = truncate_poly(a.poly - R(b_converted), a.vanishing_degree)
-        return DualNumber{T}(result_poly, a.vanishing_degree, a.field)
-    end
-    throw(ArgumentError("Cannot subtract DualNumber without field with polynomial"))
-end
-
-Base.:-(b::fpMPolyRingElem, a::DualNumber{T}) where T = begin
-    return -a + b
-end
+Base.:-(b::fpFieldElem, a::DualNumber{T}) where T = -a + b
 
 Base.:-(a::DualNumber{T}, b::Any) where T = begin
     R = parent(a.poly)
     result_poly = truncate_poly(a.poly - R(b), a.vanishing_degree)
-    return DualNumber{T}(result_poly, a.vanishing_degree, a.field)
+    return DualNumber{T}(result_poly, a.vanishing_degree)
 end
 
 Base.:-(b::Any, a::DualNumber{T}) where T = begin
     R = parent(a.poly)
     result_poly = truncate_poly(R(b) - a.poly, a.vanishing_degree)
-    return DualNumber{T}(result_poly, a.vanishing_degree, a.field)
+    return DualNumber{T}(result_poly, a.vanishing_degree)
+end
+
+function get_terms(d::DualNumber{T}) where T                # USED ONLY FOR PRETTY-PRINTING PURPOSES, POINTLESS TO IMPROVE
+    [coeff(d.poly, i) for i in 0:(d.vanishing_degree-1)]
 end
 
 Base.show(io::IO, d::DualNumber) = begin
     terms = get_terms(d)
     terms_str = String[]
-    
+
     for (i, term) in enumerate(terms)
         if term != 0
             if i == 1
@@ -216,7 +143,7 @@ Base.show(io::IO, d::DualNumber) = begin
             end
         end
     end
-    
+
     if isempty(terms_str)
         print(io, "0")
     else
@@ -224,13 +151,13 @@ Base.show(io::IO, d::DualNumber) = begin
     end
 end
 
-function evaluate_poly_with_dual(f::fpMPolyRingElem, args::Vector{DualNumber{fpFieldElem}}, isolate_var)
-    field = args[1].field
+function evaluate_poly_with_dual(f::fpMPolyRingElem, args::Vector{DualNumber{fpFieldElem}})
+    field = base_ring(args[1].poly)
     vanishing_degree = args[1].vanishing_degree
-    
-    R, (ε,) = polynomial_ring(field, ["ε"])
+
+    R, _ = polynomial_ring(field, "ε")
     result_poly = R(0)
-    
+
     exps = collect(exponent_vectors(f))
     coeffs = [coeff(f, i) for i in 1:length(exps)]
 
@@ -238,9 +165,9 @@ function evaluate_poly_with_dual(f::fpMPolyRingElem, args::Vector{DualNumber{fpF
         if exp[1] >= vanishing_degree
             continue
         end
-        
+
         term_poly = R(coeff)
-        
+
         for (i, p) in enumerate(exp)
             if p > 0
                 if i == 1 && !isnothing(args[1])
@@ -252,16 +179,15 @@ function evaluate_poly_with_dual(f::fpMPolyRingElem, args::Vector{DualNumber{fpF
                 end
             end
         end
-        
+
         term_poly = truncate_poly(term_poly, vanishing_degree)
         result_poly += term_poly
     end
-    
+
     result_poly = truncate_poly(result_poly, vanishing_degree)
-    return DualNumber{fpFieldElem}(result_poly, vanishing_degree, field)
+    return DualNumber{fpFieldElem}(result_poly, vanishing_degree)
 end
 
-
-function (f::fpMPolyRingElem)(args::Vector{DiffMinPoly.DualNumber{fpFieldElem}}, isolate_var)
-    return DiffMinPoly.evaluate_poly_with_dual(f, args, isolate_var)
+function (f::fpMPolyRingElem)(args::Vector{DualNumber{fpFieldElem}})
+    return evaluate_poly_with_dual(f, args)
 end

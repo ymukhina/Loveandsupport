@@ -383,14 +383,14 @@ function build_matrix_multipoint(n, dervs, minpoly_ord, support, n_rows; vanish_
         points = generate_points_dual(F, n_rows, n, vanish_deg)
     end
 
+    R, ε = polynomial_ring(F, "ε")
+
     # filling the columns corresponding to the derivatives
     for i in 1:n_rows
         if vanish_deg == 1 || vanish_deg == false
             M[i, 1] = F(1)
         else
-            term = [F(0) for _  in 1:vanish_deg]
-            term[1] = F(1)
-            M[i, 1] = term
+            M[i, 1] = DualNumber{fpFieldElem}(R(1), vanish_deg)
         end
 
         evals = evaluate_derivatives(dervs, points[i], vanish_deg)
@@ -446,64 +446,34 @@ function build_matrix_multipoint(n, dervs, minpoly_ord, support, n_rows; vanish_
                         if haskey(supp_to_index, supp)
                             ind = supp_to_index[supp]
                             val = M[j, ind]
-                            if val isa Vector{fpFieldElem}
-                                push!(v, DualNumber(val, vanish_deg, F))
-                            else
-                                push!(v, val)
-                            end
+                            push!(v, val)
                         else
                             push!(v, Epsilon(vanish_deg, F))
                         end
                     end
-                    multiplier_eval = 1
-                    for k in 1:length(multiplier)
-                        multiplier_eval *= v[k]^multiplier[k]
-                    end
+                    multiplier_eval = prod(v .^ multiplier)
                 else
                     multiplier_eval = M[j, mult_ind]
                 end
                
-                if multiplier_eval isa fpFieldElem
-                    term = multiplier_eval * M[j, supp_div_ind]
-                else
-                    R, (ε,) = polynomial_ring(F, ["ε"])
-                    
-                    matrix_dual = if M[j, supp_div_ind] isa fpFieldElem
-                        DiffMinPoly.DualNumber{fpFieldElem}(R(M[j, supp_div_ind]), vanish_deg, F)
-                    elseif M[j, supp_div_ind] isa Vector{fpFieldElem}
-                        DiffMinPoly.DualNumber(M[j, supp_div_ind], vanish_deg, F)
-                    else
-                        M[j, supp_div_ind]
-                    end
-                    
-                    if multiplier_eval isa DiffMinPoly.DualNumber{fpFieldElem}
-                        term = matrix_dual * multiplier_eval
-                    else
-                        multiplier_dual = if M[j, supp_div_ind] isa Vector{fpFieldElem}
-                            DiffMinPoly.DualNumber(multiplier_eval, vanish_deg, F)
-                        else
-                            DiffMinPoly.DualNumber{fpFieldElem}(R(multiplier_eval), vanish_deg, F)
-                        end
-                        term = matrix_dual * multiplier_dual
-                    end
-                    
-                    if term isa DiffMinPoly.DualNumber
-                        term = DiffMinPoly.get_terms(term)
-                    end
-                end
-                
-                M[j, i] = term
+                M[j, i] = M[j, supp_div_ind] * multiplier_eval
 
             end
         end
 
-        if !(M[1, end] isa fpFieldElem)
+        if M[1, end] isa DualNumber
             for i in 1:n_rows
                 for j in 1:lsup
                     if !(M[i, j] isa fpFieldElem)
-                        M[i, j] = M[i, j][end]
-                    else
-                        continue
+                        poly = M[i, j].poly
+                        leading_term_exponent = degree(poly)
+                        if (leading_term_exponent + 1) == vanish_deg
+                            M[i, j] = AbstractAlgebra.leading_coefficient(poly)
+                        elseif (leading_term_exponent + 1) < vanish_deg
+                            M[i, j] = 0
+                        else
+                            error("Leading term exponent is greater than vanish_deg, which is impossible.")
+                        end
                     end
                 end
             end
@@ -567,6 +537,7 @@ function build_matrix_multipoint(n, dervs, minpoly_ord, support, n_rows; vanish_
         end
 
         S = matrix_space(F, n_rows, lsup)
+
 
         return S(M)  
     end  
