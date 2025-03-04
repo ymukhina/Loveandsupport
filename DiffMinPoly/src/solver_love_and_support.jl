@@ -70,6 +70,12 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
 
     ks = split_supp(possible_supp, high_deg - 1)     #Try different number of splits
 
+    if l >= 500
+        ks = [k for k in ks if l - k >= 500]  # This might actually be still too greedy and suboptimal ([2, 3, 3] case has optimal splits = 12 at 4949 for supp of 7875)
+    else                                                                                # e.g. 2926 rows or 37% of total matrix
+        ks = [k for k in ks if (100*k/l) <= 80]
+    end
+
     info && @info "Splitting at indices $ks for System of size $l"
 
     solve_ker = 0
