@@ -68,13 +68,15 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
 
     info && @info "Highest degree of x1 in the support is $high_deg"
 
-    ks = split_supp(possible_supp, high_deg - 1)     #Try different number of splits
+    ks = split_supp(possible_supp, high_deg - 1)
 
-    if l >= 500
-        ks = [k for k in ks if l - k >= 500]  # This might actually be still too greedy and suboptimal ([2, 3, 3] case has optimal splits = 12 at 4949 for supp of 7875)
-    else                                                                                # e.g. 2926 rows or 37% of total matrix
-        ks = [k for k in ks if (100*k/l) <= 80]
+    if l > 6500
+        ks = [k for k in ks if l - k > 4000]  
+    else                                                                                
+        ks = [k for k in ks if (l-k) > div(l, 2)]
     end
+
+    info && @info "Last Block Row is $(l - ks[end]) for $(length(ks)) splits"
 
     info && @info "Splitting at indices $ks for System of size $l"
 
