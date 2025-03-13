@@ -19,9 +19,8 @@ If `prob` is set to 1, the result is guaranteed to be correct.
 function eliminate(ode::ODE, x, prob = 0.99)
                                                                            
     @assert x in ode.x_vars
-    minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, rand(2^25:2^32 - 1))
 
-    # add a comment
+    minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, rand(2^25:2^32 - 1))
                                                                                                                 
     check = min_pol -> begin
         if isone(prob)
@@ -32,6 +31,7 @@ function eliminate(ode::ODE, x, prob = 0.99)
     end
     
     while check(minimal_poly) == false
+        @info "Incorrect minimal polynomial. Running Love & Support again (T_T)"
         starting_prime = Hecke.next_prime(starting_prime)
         minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, starting_prime)
     end
@@ -61,28 +61,103 @@ function eliminate_with_love_and_support_modp(ode::ODE, x, p::Int, ord::Int=minp
     l = length(possible_supp)
     info && @info "The size of the estimates support is $(length(possible_supp))"
 
-    tim2 = @elapsed ls = build_matrix_multipoint(F, ode_mod_p, x_mod_p, ord, possible_supp, info = info)
-                                                                    
-    info && @info "eval method $(tim2)"
+    tim2 = @elapsed dervs = lie_derivatives(ord, ode_mod_p, x_mod_p)
+    info && @info "Computing Derivatives in: $(tim2)"
 
-    info && @info "linear system dims $(size(ls))"
+    high_deg = possible_supp[end][1]
+
+    info && @info "Highest degree of x1 in the support is $high_deg"
+
+    ks = split_supp(possible_supp, high_deg - 1)
+
+    if l > 6500
+        ks = [k for k in ks if l - k > 4000]  
+    else                                                                                
+        ks = [k for k in ks if (l-k) > div(l, 2)]
+    end
+
+    info && @info "Last Block Row is $(l - ks[end]) for $(length(ks)) splits"
+
+    info && @info "Splitting at indices $ks for System of size $l"
+
+    solve_ker = 0
+    build_mat = 0
+
+    for i in 1:length(ks) + 1
+        if i > length(ks)
+            supp = possible_supp
+        else
+            supp = possible_supp[1:ks[i]]
+        end
+
+        if 1 < i && i <= length(ks)         # Neither first nor last
+            n_rows = ks[i] - ks[i - 1]      
+        elseif 1 < i                        # Last row case
+            n_rows = l - ks[i - 1]
+        else                                # First row case (i == 1)
+            n_rows = ks[i]
+        end
+
+        if n_rows == 0
+            n_rows = 1
+        end
+        
+        # println("Row $i is $((n_rows/l)*100)% of Total Linear System")
+        strt = time()
+        if i > length(ks)                   # Allows to build only each block row one by one to not overload memory.
+            ls = build_matrix_multipoint(n, dervs, ord, supp, n_rows, info = info)    # Last Block row
+        else
+            ls = build_matrix_multipoint(n, dervs, ord, supp, n_rows, vanish_deg = Int(i), info = info)   # All other block rows
+        end    
+        t = time() - strt
+        build_mat += t
+
+        strt = time()
+        if i == 1
+            ker = kernel(ls, side=:right)     #First row
+        elseif i <= length(ks)
+            ker = solve_linear_combinations(ls, ker, ks[i - 1])  # All subsequent rectangular blocks
+        else
+            ker = solve_linear_combinations(ls, ker, ks[end])              #Last row
+        end
+        t = time() - strt
+        solve_ker += t
+        dim = size(ker)[2]
+        if dim > 1
+            info && @info "The dimension of the $i th solution space is $(dim)"
+        end
     
-    system_soltime = @elapsed ker = kernel(ls, side=:right)
-    info && @info "Linear system solved in $system_soltime"
+    end
+                                                                    
     dim = size(ker)[2]
     info && @info "The dimension of the solution space is $(dim)"
+    if dim > 1
+        info && @info "Adding $(dim-1) rows to compensate for loss"
+        strt = time()
+        E = build_matrix_multipoint(n, dervs, ord, possible_supp, dim-1, info = info)
+        t = time() - strt
+        build_mat += t
+        info && @info "Additional rows added in $(time() - strt)"
+        strt = time()
+        ker = solve_linear_combinations(E, ker)
+        t = time() - strt
+        solve_ker += t
+        info && @info "Reduced solution space computed in $t"
+        dim = size(ker, 2)
+        info && @info "The dimension of the new solution space is $(dim)"
+    end
 
-    start_constructing_time = time()
-
+    info && @info "Matrix building took $build_mat"
+    info && @info "Kernel computation took $solve_ker"
+    strt = time()
     R, _ = polynomial_ring(F, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:ord]...])
             
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
-    
     g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
-       
-    info && @info "The resulting polynomial computes in $(time() - start_constructing_time)"
+    
+    info && @info "The resulting polynomial computes in $(time() - strt)"
 
-    return g * (1 // Oscar.leading_coefficient(g))
+    return g * (1 // Oscar.leading_coefficient(g)), build_mat, solve_ker
 end
 
 
@@ -107,6 +182,7 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
     crts = zeros(ZZ, l_supp)
     found_cand = falses(l_supp)
     is_stable = falses(l_supp)
+    ker_t, mat_t = 0, 0
     
     is_first_prime = true
     while !all(is_stable)
@@ -118,23 +194,12 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
         prim_cnt += 1
         
         @info "Chose $prim_cnt th prime $p, $(length(findall(is_stable))) stable coefficients"
-        sol_mod_p = eliminate_with_love_and_support_modp(ode, x, Int(p), minpoly_ord, possible_supp)  
+        sol_mod_p, m_t, k_t = eliminate_with_love_and_support_modp(ode, x, Int(p), minpoly_ord, possible_supp)  
 
-
+        ker_t += k_t
+        mat_t += m_t
 
         if is_first_prime
-            # starting_prime = 65519
-            # r = ZZ(starting_prime)                                        
-            # @info "Chose $prim_cnt th prime $r, $(length(findall(is_stable))) stable coefficients"
-            # sol_mod_p_2 = eliminate_with_love_and_support_modp(ode, x, Int(r), minpoly_ord, possible_supp) 
-            # filter!(exp -> !iszero(coeff(sol_mod_p_2, Vector{Int}(exp))), possible_supp)
-            # add_unit!(possible_supp, minpoly_ord)
-            # l_supp = length(possible_supp)
-            # resize!(sol_vector, l_supp)
-            # resize!(crts, l_supp)
-            # resize!(found_cand, l_supp)
-            # resize!(is_stable, l_supp)
-            # @info "updated support, new size is $(length(possible_supp))"
 
             filter!(exp -> !iszero(coeff(sol_mod_p, Vector{Int}(exp))), possible_supp)
             add_unit!(possible_supp, minpoly_ord)
@@ -143,7 +208,7 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
             resize!(crts, l_supp)
             resize!(found_cand, l_supp)
             resize!(is_stable, l_supp)
-            @info "updated support, new size is $(length(possible_supp))"
+            @info "Updated Support. New Size is $(length(possible_supp))"
 
             is_first_prime = false
             starting_prime = Hecke.next_prime(rand(2^32:2^62))
@@ -155,7 +220,7 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
 
             if found_cand[i]
                 if Oscar.divides(denominator(sol_vector[i]), p)[1]
-                    @info "bad prime, restarting"
+                    @info "Bad Prime. Restarting..."
                     @goto nxt_prm
                 end
                 sol_i_mod_p = qq_to_mod(sol_vector[i], p)
@@ -179,7 +244,12 @@ function eliminate_with_love_and_support(ode::ODE, x, starting_prime::Int)
 
         prod_of_done_primes *= p
     end 
-    
+
+    println("#------------------------------------------------------------#")
+    @info "Overall Matrix Building: $mat_t"
+    @info "Overall Kernel Computation: $ker_t"
+    println("#------------------------------------------------------------#")
+
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
     g = sum([s * m for (s, m) in zip(sol_vector, mons)])
     return g, starting_prime
@@ -204,7 +274,7 @@ function rand_poly(deg, vars)
                 for i in 1:length(vars)
                     monom *= vars[i]^m[i]
                 end
-               result += rand(1:20) * monom
+               result += rand(1:2) * monom
             end
         end
 
@@ -263,7 +333,7 @@ function f_min_support(ode::ODE, x, jacobian_rank::Int; info = true)
         A = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
         b = vcat(ineq_rhs, zeros(QQ, n + 1))
     end
-    return sort_gleb!(collect(lattice_points(Oscar.polyhedron(A, b))))
+    return sort_gleb_max!(collect(lattice_points(Oscar.polyhedron(A, b))))
 end
 
 # -------- Functions for test of correctness -------- #
@@ -302,62 +372,183 @@ end
 
 # -------- Function for matrix construction for Ansatz -------- #
 
-# This function assumes that support contains the unit vectors and is sorted by `sort_gleb!`
-function build_matrix_multipoint(F, ode, x, minpoly_ord, support; info = true)
+# This function assumes that support contains the unit vectors and is sorted by `sort_gleb_max!`
+function build_matrix_multipoint(n, dervs, minpoly_ord, support, n_rows; vanish_deg = false, info = true)
     var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1) ]                                           
-    n = length(ode.x_vars)
-    @info "computing derivatives"
-    dervs = lie_derivatives(minpoly_ord, ode, x)
-    @info "done"
+    F = base_ring(parent(dervs[end]))
 
     support = [Vector{Int64}(p) for p in support]
     
-    lsup = length(support)                                                    
-    S = matrix_space(F, lsup, lsup)
-    M = zero(S)
+    lsup = length(support)       
+
+    M = Array{Any}(undef, n_rows, lsup)
+
     supp_to_index = Dict(s => i for (i, s) in enumerate(support))
 
+    if vanish_deg == false
+        points = generate_points_base(F, n_rows, n)
+    else
+        points = generate_points_dual(F, n_rows, n, vanish_deg)
+    end
+
+    R, ε = polynomial_ring(F, "ε")
+
     # filling the columns corresponding to the derivatives
-    for i in 1:lsup
-        M[i, 1] = 1
-        vec = [rand(F) for _ in 1:(n + 1) ]                                      
-        evals = [derv(vec...) for derv in dervs]
+    for i in 1:n_rows
+        if vanish_deg == 1 || vanish_deg == false
+            M[i, 1] = F(1)
+        else
+            M[i, 1] = DualNumber{fpFieldElem}(R(1), vanish_deg)
+        end
+
+        evals = evaluate_derivatives(dervs, points[i], vanish_deg)
         
         
         for j in 1:(minpoly_ord + 1)
             supp = var_to_sup(j)
-            ind = supp_to_index[supp]
-            M[i, ind] = evals[j]
+            if haskey(supp_to_index, supp)
+                ind = supp_to_index[supp]
+                M[i, ind] = evals[j]
+            end
         end
     end
 
     # filling the rest of the columns
-    for i in (minpoly_ord + 3):lsup
-        supp = support[i]
-        supp_divisor = copy(supp)
-        nonzero_ind = findfirst(x -> x > 0, supp_divisor)
-        supp_divisor[nonzero_ind] -= 1                                                 
-        multiplier = zeros(Int, minpoly_ord + 1)
-        multiplier[nonzero_ind] += 1
-        while !haskey(supp_to_index, supp_divisor)
+    if vanish_deg != false
+        for i in 1:lsup
+            supp = support[i]
+            supp_divisor = copy(supp)
             nonzero_ind = findfirst(x -> x > 0, supp_divisor)
-            supp_divisor[nonzero_ind] -= 1
-            multiplier[nonzero_ind] += 1
-        end                                                    
-        
-        supp_div_ind = supp_to_index[supp_divisor]
-        mult_ind = get(supp_to_index, multiplier, -1)
-        for j in 1:lsup
-            if mult_ind == -1
-                multiplier_eval = prod(M[j, 2:(minpoly_ord + 2)] .^ multiplier)
-            else
-                multiplier_eval = M[j, mult_ind]
+            if nonzero_ind === nothing
+                continue
             end
-            M[j, i] = M[j, supp_div_ind] * multiplier_eval           
+    
+            supp_divisor[nonzero_ind] -= 1
+            if all(x -> x == 0, supp_divisor)
+                continue
+            end
+    
+            multiplier = zeros(Int, minpoly_ord + 1)
+            multiplier[nonzero_ind] += 1
+            while !haskey(supp_to_index, supp_divisor)
+                nonzero_ind = findfirst(x -> x > 0, supp_divisor)
+                if nonzero_ind === nothing
+                    break
+                end
+                supp_divisor[nonzero_ind] -= 1
+                multiplier[nonzero_ind] += 1
+            end             
+            
+            if !haskey(supp_to_index, supp_divisor)
+                error("Unexpected Situation: Divisor not found in support. Shouldn't happen with ordering.")
+            end
+            
+            supp_div_ind = supp_to_index[supp_divisor]
+            mult_ind = get(supp_to_index, multiplier, -1)
+    
+            for j in 1:n_rows
+                if mult_ind == -1
+                    v = []
+                    for k in 1:(minpoly_ord + 1)
+                        supp = var_to_sup(k)
+                        if haskey(supp_to_index, supp)
+                            ind = supp_to_index[supp]
+                            val = M[j, ind]
+                            push!(v, val)
+                        else
+                            push!(v, Epsilon(vanish_deg, F))
+                        end
+                    end
+                    multiplier_eval = prod(v .^ multiplier)
+                else
+                    multiplier_eval = M[j, mult_ind]
+                end
+               
+                M[j, i] = M[j, supp_div_ind] * multiplier_eval
+
+            end
         end
-    end
-      
-  return M
+
+        if M[1, end] isa DualNumber
+            for i in 1:n_rows
+                for j in 1:lsup
+                    if !(M[i, j] isa fpFieldElem)
+                        poly = M[i, j].poly
+                        leading_term_exponent = degree(poly)
+                        if (leading_term_exponent + 1) == vanish_deg
+                            M[i, j] = AbstractAlgebra.leading_coefficient(poly)
+                        elseif (leading_term_exponent + 1) < vanish_deg
+                            M[i, j] = 0
+                        else
+                            error("Leading term exponent is greater than vanish_deg, which is impossible.")
+                        end
+                    end
+                end
+            end
+        end
+        
+        S = matrix_space(F, n_rows, lsup)
+          
+        return S(M)
+
+    else
+        for i in 1:lsup
+            supp = support[i]
+            supp_divisor = copy(supp)
+            nonzero_ind = findfirst(x -> x > 0, supp_divisor)
+            if nonzero_ind === nothing
+                continue
+            end
+    
+            supp_divisor[nonzero_ind] -= 1
+            if all(x -> x == 0, supp_divisor)
+                continue
+            end
+    
+            multiplier = zeros(Int, minpoly_ord + 1)
+            multiplier[nonzero_ind] += 1
+            while !haskey(supp_to_index, supp_divisor)
+                nonzero_ind = findfirst(x -> x > 0, supp_divisor)
+                if nonzero_ind === nothing
+                    break
+                end
+                supp_divisor[nonzero_ind] -= 1
+                multiplier[nonzero_ind] += 1
+            end             
+            
+            if !haskey(supp_to_index, supp_divisor)
+                error("Unexpected Situation: Divisor not found in support. Shouldn't happen with ordering.")
+            end
+            
+            supp_div_ind = supp_to_index[supp_divisor]
+            mult_ind = get(supp_to_index, multiplier, -1)
+    
+            for j in 1:n_rows
+                if mult_ind == -1
+                    v = []
+                    for k in 1:(minpoly_ord + 1)
+                        supp = var_to_sup(k)
+                        if haskey(supp_to_index, supp)
+                            ind = supp_to_index[supp]
+                            push!(v, M[j, ind])
+                        else
+                            println("VERY BIG PROBLEM. SHOULD NEVER HAPPEN SINCE ALL x1, x1', x1'' ... SHOULD BE IN SUPPORT.")
+                            push!(v, F(0))
+                        end
+                    end
+                    multiplier_eval = prod(v .^ multiplier)
+                else
+                    multiplier_eval = M[j, mult_ind]
+                end
+                M[j, i] = M[j, supp_div_ind] * multiplier_eval           
+            end
+        end
+
+        S = matrix_space(F, n_rows, lsup)
+
+
+        return S(M)  
+    end  
 end
 
 # -------- Auxiliary Functions -------- #
@@ -378,14 +569,13 @@ function qq_to_mod(a::QQFieldElem, p)
 end
 
 
-# One would suggest to hit the road...
 function add_unit!(supp, jacobian_rank)
     l_supp = length(supp)
     for j in 1:(jacobian_rank + 2)         
         unit = [i == j ? one(ZZ) : zero(ZZ) for i in 1:(jacobian_rank + 1)] 
         !(unit in supp) && push!(supp, point_vector(ZZ, unit))  
     end                                                                                                                           
-    l_supp < length(supp) && sort_gleb!(supp)
+    l_supp < length(supp) && sort_gleb_max!(supp)
     return supp 
 end                                                                                                                        
 
@@ -409,5 +599,10 @@ end
 function sort_gleb!(exp_vectors::Vector{PointVector{ZZRingElem}})
     sort!(exp_vectors, by = s -> [sum(s), s[end:-1:1]...])
 end
+
+function sort_gleb_max!(exp_vectors::Vector{PointVector{ZZRingElem}})
+    sort!(exp_vectors, by = s -> (s[1], sum(s), s[end:-1:1]...))
+end
+
 
 # ————————————————— #
