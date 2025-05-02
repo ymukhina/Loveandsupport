@@ -18,7 +18,7 @@ If `prob` is set to 1, the result is guaranteed to be correct.
 """
 function eliminate(ode::ODE, x, prob = 0.99)
                                                                            
-    @assert x in ode.x_vars
+    #@assert x in ode.x_vars
     minimal_poly, starting_prime = eliminate_with_love_and_support(ode, x, rand(2^25:2^32 - 1))
 
     # add a comment
@@ -231,40 +231,76 @@ function rand_ode(degs::Vector{Int}; char=0)
     )
 end
 
+"""
+    rand_ode_y(degs)
+
+Computes the polynomial ODE model `ode` with the right hand side of degrees ‘degs’ such that y(t) has the degree degs[end].
+                                            
+"""
+
+function rand_ode_y(degs::Vector{Int}; char=0)
+    n = length(degs)
+    F = iszero(char) ? QQ : GF(char)
+    R, vars = polynomial_ring(QQ, vcat(["x$i(t)" for i in 1:n-1], ["y(t)"]))
+    return StructuralIdentifiability.ODE{Ptype}(
+        vars[1:n-1],
+        [vars[end]],
+        Dict(vars[i] => rand_poly(degs[i], vars[1:n-1]) for i in 1:n-1),
+        Dict(vars[end] => rand_poly(degs[n], vars[1:n-1])),
+        Ptype[]
+    )
+end
 
 # -------- estimate support for f_min based on Theorem 1  -------- #
 
 function f_min_support(ode::ODE, x, jacobian_rank::Int; info = true)
     n = jacobian_rank
-    d1 = total_degree(ode.x_equations[x])
-    @assert d1 > 0 "d1 = 0"
-    D = maximum(total_degree, [eq for (v, eq) in ode.x_equations if v != x])
-    D = max(D, 0)
-    info && @info "We have d1 = $d1 and D = $D"
-    if d1 <= D
-        ineq_lhs = reshape([1, [d1 + (k - 1) * (D - 1) for k in 1:n]...], 1, n + 1)
-        ineq_rhs = [prod([d1 + (k - 1) * (D - 1) for k in 1:n])]
+
+    if x == only(ode.y_vars) 
+        d = maximum(total_degree(ode.y_equations[ode.y_vars[1]]))
+        D = maximum(total_degree(ode.x_equations[x]) for x in ode.x_vars)
+        D = max(D, 0)
+    
+        info && @info "We have d = $d and D = $D"
+    
+        ineq_lhs = reshape([d + (k - 1) * (D - 1) for k in 1:n+1], 1, n+1)
+        ineq_rhs = [prod([d + (k - 1) * (D - 1) for k in 1:n+1])]
+    
         A = vcat(matrix(QQ, ineq_lhs), -identity_matrix(QQ, n + 1))
         b = vcat(ineq_rhs, zeros(QQ, n + 1))
     else
-        ineq_lhs1 = [k <= l ? k * (D - 1) + 1 : 0 for l in 0:(n - 1), k in 0:n]
-        ineq_lhs2 = zeros(Int, n, n + 1)
-        for l in 0:(n - 1)
-            for i in 1:(n - l)
-                ineq_lhs2[l + 1, i + l + 1] = i * (d1 - 1) + l * (D - 1) + 1
+        d1 = total_degree(ode.x_equations[x])
+        @assert d1 > 0 "d1 = 0"
+        D = maximum(total_degree, [eq for (v, eq) in ode.x_equations if v != x])
+        D = max(D, 0)
+        info && @info "We have d1 = $d1 and D = $D"
+        if d1 <= D
+            ineq_lhs = reshape([1, [d1 + (k - 1) * (D - 1) for k in 1:n]...], 1, n + 1)
+            ineq_rhs = [prod([d1 + (k - 1) * (D - 1) for k in 1:n])]
+            A = vcat(matrix(QQ, ineq_lhs), -identity_matrix(QQ, n + 1))
+            b = vcat(ineq_rhs, zeros(QQ, n + 1))
+        else
+            ineq_lhs1 = [k <= l ? k * (D - 1) + 1 : 0 for l in 0:(n - 1), k in 0:n]
+            ineq_lhs2 = zeros(Int, n, n + 1)
+            for l in 0:(n - 1)
+                for i in 1:(n - l)
+                    ineq_lhs2[l + 1, i + l + 1] = i * (d1 - 1) + l * (D - 1) + 1
+                end
             end
+            ineq_rhs = Vector{Int}(undef, n)
+            for l in 0:(n-1)
+                fac1 = prod(Vector{Int}([d1 + (k - 1) * (D - 1) for k in 1:l]))
+                fac2 = prod(Vector{Int}([i * (d1 - 1) + l * (D - 1) + 1 for i in 1:(n - l)]))
+                ineq_rhs[l+1] = fac1*fac2
+            end
+            A = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
+            b = vcat(ineq_rhs, zeros(QQ, n + 1))
         end
-        ineq_rhs = Vector{Int}(undef, n)
-        for l in 0:(n-1)
-            fac1 = prod(Vector{Int}([d1 + (k - 1) * (D - 1) for k in 1:l]))
-            fac2 = prod(Vector{Int}([i * (d1 - 1) + l * (D - 1) + 1 for i in 1:(n - l)]))
-            ineq_rhs[l+1] = fac1*fac2
-        end
-        A = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
-        b = vcat(ineq_rhs, zeros(QQ, n + 1))
     end
     return sort_gleb!(collect(lattice_points(Oscar.polyhedron(A, b))))
 end
+
+
 
 # -------- Functions for test of correctness -------- #
                     
@@ -397,11 +433,27 @@ function lie_derivative(pol, ode)
    return result
 end
       
-        
+function y_lie_derivatives(n::Int, ode::ODE)
+    yvar = only(ode.y_vars)
+    result = [ode.y_equations[yvar]]
+    for i in 1:n
+        push!(result, DiffMinPoly.lie_derivative(result[end], ode))
+    end
+    return result
+end  
+
+
 function lie_derivatives(ord, ode, var)
-    result = [var]            
-    for i in 1:ord
-        push!(result, lie_derivative(last(result), ode))
+    if var == only(ode.y_vars) 
+        result = [ode.y_equations[var]]
+        for i in 1:ord
+            push!(result, lie_derivative(result[end], ode))
+        end 
+    else 
+        result = [var] 
+        for i in 1:ord
+            push!(result, lie_derivative(last(result), ode))
+        end 
     end
     return result
 end

@@ -1,4 +1,4 @@
-using DiffMinPoly
+include("../src/solver_love_and_support.jl")
 using Oscar
 using Nemo
 using StructuralIdentifiability
@@ -9,11 +9,10 @@ const Ptype = QQMPolyRingElem
 # -------- Test function -------- #
 
 # test ansatz against IO enemy equation 
-function check_ansatz_modp(ode::ODE, p::Int)
+function check_ansatz_modp(ode::ODE, p::Int, x)
 
-    x = first(sort(ode.x_vars, rev = true))
-    ord = DiffMinPoly.minpoly_order(ode, x) 
-    possible_supp = DiffMinPoly.f_min_support(ode, x, ord)
+    ord = minpoly_order(ode, x) 
+    possible_supp = f_min_support(ode, x, ord)
     
     @info "Solving with love and support!"
     tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, x, p, ord, possible_supp; info = false)
@@ -44,14 +43,11 @@ function check_ansatz_modp(ode::ODE, p::Int)
     return iszero(rem) && iszero(total_degree(quot))
 end
 
-# Gleb: there are no tests for the main function!
-# Yulia: Changed to eliminate below
-function check_ansatz(ode::ODE)
-        
-    x = first(sort(ode.x_vars, rev = true))    
+
+function check_ansatz(ode::ODE, x)
 
     @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = DiffMinPoly.eliminate(ode, x)
+    tim = @elapsed io_tocheck = eliminate(ode, x)
     @info "time: $(tim) seconds"
    
 

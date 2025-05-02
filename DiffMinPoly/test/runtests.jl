@@ -1,27 +1,28 @@
 using Test
-using DiffMinPoly
 using StructuralIdentifiability
 
 include("test_utils.jl")
 
 cases = []
+cases_y = []
 
 generics = [
     [2, 1, 1],
     [2, 2, 2],
-    #[2, 3, 3],
-    #[2, 4, 4], 
-    #[2, 5, 5],  
-    #[3, 1, 1], 
-    #[3, 2, 2],
-    #[3, 3, 3],
-    #[1,2,2,2],
-    #[2,1,1,1],  
+#   [2, 3, 3],
+#   [2, 4, 4], 
+#   [2, 5, 5],  
+#   [3, 1, 1], 
+#   [3, 2, 2],
+#   [3, 3, 3],
+#   [1,2,2,2],
+#   [2,1,1,1],  
 ]
 
 for ds in generics
     push!(cases, rand_ode(ds))
 end
+
 
 push!(
     cases,
@@ -56,8 +57,28 @@ push!(
     
 )
 
+generics_y = [
+    [2, 1],
+    [2, 1, 1],
+    [1, 1, 2],
+    [2, 2, 2],
+]
+
+for ds in generics_y
+    push!(cases_y, rand_ode_y(ds))
+end
+
 @testset "Testing against the standard algorithms" begin
     for c in cases
-        @test check_ansatz(c)
+        x = first(sort(c.x_vars, rev = true)) 
+        @test check_ansatz(c, x)
+    end
+
+    for c in cases_y
+        y = only(c.y_vars) 
+        print(c)
+        print(y)
+        @test check_ansatz(c, y)
     end
 end
+
