@@ -1,10 +1,11 @@
 using Test
 using StructuralIdentifiability
+using DiffMinPoly
+using DiffMinPoly: rand_ode_y
 
 include("test_utils.jl")
 
 cases = []
-cases_y = []
 
 generics = [
     [2, 1, 1],
@@ -23,6 +24,16 @@ for ds in generics
     push!(cases, rand_ode(ds))
 end
 
+generics_y = [
+    [2, 1],
+    [2, 1, 1],
+    [1, 1, 2],
+    [2, 2, 2],
+]
+
+for ds in generics_y
+    push!(cases, rand_ode_y(ds))
+end
 
 push!(
     cases,
@@ -51,34 +62,12 @@ push!(
         x2'(t) = 2^31 * x2(t)^2 + 2^15 * x1(t) + 17,
         x3'(t) = 19 * x1(t) + 95 * x2(t),
         y(t) = x1(t)
-    ),
-    
-    
-    
+    ),    
 )
-
-generics_y = [
-    [2, 1],
-    [2, 1, 1],
-    [1, 1, 2],
-    [2, 2, 2],
-]
-
-for ds in generics_y
-    push!(cases_y, rand_ode_y(ds))
-end
 
 @testset "Testing against the standard algorithms" begin
     for c in cases
-        x = first(sort(c.x_vars, rev = true)) 
-        @test check_ansatz(c, x)
-    end
-
-    for c in cases_y
-        y = only(c.y_vars) 
-        print(c)
-        print(y)
-        @test check_ansatz(c, y)
+        @test check_ansatz(c)
     end
 end
 

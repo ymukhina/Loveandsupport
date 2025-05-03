@@ -9,13 +9,13 @@ const Ptype = QQMPolyRingElem
 # -------- Test function -------- #
 
 # test ansatz against IO enemy equation 
-function check_ansatz_modp(ode::ODE, p::Int, x)
+function check_ansatz_modp(ode::ODE, p::Int)
 
-    ord = minpoly_order(ode, x) 
-    possible_supp = f_min_support(ode, x, ord)
+    ord = minpoly_order(ode) 
+    possible_supp = f_min_support(ode, ord)
     
     @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, x, p, ord, possible_supp; info = false)
+    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, p, ord, possible_supp; info = false)
     @info "time: $(tim) seconds"
 
     @info "Solving without love and support :("
@@ -29,8 +29,6 @@ function check_ansatz_modp(ode::ODE, p::Int, x)
 
     # the variables of io_correct
     n = ngens(R)
-    println(gens(R))
-    println(gens(S))
     # the worst thing in the known universe
     svnames = (string).(S.S)
     y_index = findfirst(vname -> vname == "y(t)_0", svnames)
@@ -40,14 +38,14 @@ function check_ansatz_modp(ode::ODE, p::Int, x)
     phi = hom(R, S, ys)
 
     quot, rem = divrem(phi(io_tocheck), io_correct)
-    return iszero(rem) && iszero(total_degree(quot))
+    return iszero(rem) && iszero(total_degree(quot)) && !iszero(quot)
 end
 
 
-function check_ansatz(ode::ODE, x)
+function check_ansatz(ode::ODE)
 
     @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = eliminate(ode, x)
+    tim = @elapsed io_tocheck = eliminate(ode)
     @info "time: $(tim) seconds"
    
 
@@ -69,6 +67,6 @@ function check_ansatz(ode::ODE, x)
 
     phi = hom(R, S, ys)
     quot, rem = divrem(phi(io_tocheck), io_correct)
-    return iszero(rem) && iszero(total_degree(quot))
+    return iszero(rem) && iszero(total_degree(quot)) && !iszero(quot)
 end
-        
+
