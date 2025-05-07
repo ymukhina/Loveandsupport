@@ -1,7 +1,6 @@
 using Test
 using StructuralIdentifiability
 using DiffMinPoly
-using DiffMinPoly: rand_ode_y
 
 include("test_utils.jl")
 
@@ -21,7 +20,7 @@ generics = [
 ]
 
 for ds in generics
-    push!(cases, rand_ode(ds))
+    push!(cases, rand_ode_x(ds))
 end
 
 generics_y = [
@@ -32,7 +31,7 @@ generics_y = [
 ]
 
 for ds in generics_y
-    push!(cases, rand_ode_y(ds))
+    push!(cases, rand_ode(ds))
 end
 
 push!(
