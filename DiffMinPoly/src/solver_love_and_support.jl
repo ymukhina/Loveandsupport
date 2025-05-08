@@ -78,7 +78,15 @@ function eliminate_with_love_and_support_modp(
     start_constructing_time = time()
 
     y_var = only(ode.y_vars)
-    R, _ = polynomial_ring(F, [var_to_str(y_var), [var_to_str(y_var) * "^($i)" for i in 1:ord]...])
+    # TODO: this lines is duplicated - should be removed somewhere
+    R, _ = polynomial_ring(
+        F,
+        vcat(
+            [var_to_str(p) for p in ode.parameters],
+            [var_to_str(y_var)],
+            [var_to_str(y_var) * "^($i)" for i in 1:ord],
+        )
+    )
             
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
     
@@ -103,7 +111,14 @@ function eliminate_with_love_and_support(ode::ODE, starting_prime::Int)
     possible_supp = f_min_support(ode, minpoly_ord)
     l_supp = length(possible_supp)
     y_var = only(ode.y_vars)
-    R, _ = polynomial_ring(QQ, [var_to_str(y_var), [var_to_str(y_var) * "^($i)" for i in 1:minpoly_ord]...])
+    R, _ = polynomial_ring(
+        QQ,
+        vcat(
+            [var_to_str(p) for p in ode.parameters],
+            [var_to_str(y_var)],
+            [var_to_str(y_var) * "^($i)" for i in 1:minpoly_ord],
+        )
+    )
  
     prod_of_done_primes = one(ZZ)
     prim_cnt = 0
@@ -127,7 +142,7 @@ function eliminate_with_love_and_support(ode::ODE, starting_prime::Int)
 
         if is_first_prime
             filter!(exp -> !iszero(coeff(sol_mod_p, Vector{Int}(exp))), possible_supp)
-            add_unit!(possible_supp, minpoly_ord)
+            add_unit!(possible_supp)
             l_supp = length(possible_supp)
             resize!(sol_vector, l_supp)
             resize!(crts, l_supp)
@@ -179,11 +194,12 @@ end
 
 function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
     n = jacobian_rank
+    m = length(ode.parameters)
     
     y = first(values(ode.y_equations))
 
-    if y in ode.x_vars
-        @info "The output is a single variable, using the refined bound"
+    if (y in ode.x_vars) && m == 0
+        @info "The output is a single variable and there are no parameters, using the refined bound"
         # Bound using Theorem 1 from https://arxiv.org/abs/2501.13680
         d = total_degree(ode.x_equations[y])
         @assert d > 0 "d = 0"
@@ -214,18 +230,24 @@ function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
         end
     else
         # bound from the new paper (todo: precise reference)
-        @info "The output is not a single variable, using the general bound"
-        d = total_degree(y)
-        D = maximum(total_degree(ode.x_equations[x]) for x in ode.x_vars)
-        D = max(D, 0)
+        @info "The output is not a single variable or there are parameters, using the general bound"
+        dx, dp = subtotal_degree(y, ode.x_vars), subtotal_degree(y, ode.parameters)
+        Dx = maximum(subtotal_degree(ode.x_equations[x], ode.x_vars) for x in ode.x_vars)
+        Dp = maximum(subtotal_degree(ode.x_equations[x], ode.parameters) for x in ode.x_vars)
+        Dx = max(Dx, 0)
+        Dp = max(Dp, 0)
     
-        info && @info "We have d = $d and D = $D"
+        info && @info "We have d = ($dx, $dp) and D = ($Dx, $Dp)"
     
-        ineq_lhs = reshape([d + (k - 1) * (D - 1) for k in 1:(n + 1)], 1, n + 1)
+        d = dx + dp
+        D = Dx + Dp
+
+        # parameters first
+        ineq_lhs = reshape(vcat([1 for _ in ode.parameters], [d + (k - 1) * (D - 1) for k in 1:(n + 1)]), 1, n + m + 1)
         ineq_rhs = [prod([d + (k - 1) * (D - 1) for k in 1:(n + 1)])]
     
-        A = vcat(matrix(QQ, ineq_lhs), -identity_matrix(QQ, n + 1))
-        b = vcat(ineq_rhs, zeros(QQ, n + 1))
+        A = vcat(matrix(QQ, ineq_lhs), -identity_matrix(QQ, n + m + 1))
+        b = vcat(ineq_rhs, zeros(QQ, n + m + 1))
     end
 
     return sort_gleb!(collect(lattice_points(Oscar.polyhedron(A, b))))
@@ -248,19 +270,20 @@ end
 function is_zero_mod_ode_prob(pol, ode::ODE, prob = 0.99) 
     start_time = time()
     n = length(ode.x_vars)
+    m = length(ode.parameters)
     y = first(values(ode.y_equations))
     ord = minpoly_order(ode)
                                                                              
     lie_derivs = lie_derivatives(y, ode, ord) 
-    D = [total_degree(d) for d in lie_derivs]                        
+    D = vcat([1 for _ in ode.parameters], [total_degree(d) for d in lie_derivs])
     deg_bnd = findmax([sum(m .* D) for m in Oscar.exponents(pol)])[1]
     
-    N = Int(1 + ceil(deg_bnd / (1 - prob)))           
+    N = Int(1 + ceil(deg_bnd / (1 - prob)))
                                 
-    vec = [rand(1:N) for _ in 1:(n + 1)]
+    vec = [rand(1:N) for _ in 1:(n + m + 1)]
      
-    evals = [deriv(vec...) for deriv in lie_derivs]                        
-                       
+    evals = vcat([vec[findfirst(isequal(p), gens(parent(ode)))] for p in ode.parameters], [deriv(vec...) for deriv in lie_derivs])
+
     res = pol(evals...)
     @info "Checked membership probabilistically in $(time() - start_time) seconds"     
     return iszero(res)
@@ -271,8 +294,9 @@ end
 # This function assumes that support contains the unit vectors and is sorted by `sort_gleb!`
 function build_matrix_multipoint(F, ode, minpoly_ord, support; info = true)
     y = first(values(ode.y_equations))
-    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1) ]                                           
+    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1:(minpoly_ord + m + 1) ]                                           
     n = length(ode.x_vars)
+    m = length(ode.parameters)
     dervs = lie_derivatives(y, ode, minpoly_ord)
 
     support = [Vector{Int64}(p) for p in support]
@@ -285,23 +309,27 @@ function build_matrix_multipoint(F, ode, minpoly_ord, support; info = true)
     # filling the columns corresponding to the derivatives
     for i in 1:lsup
         M[i, 1] = 1
-        vec = [rand(F) for _ in 1:(n + 1) ]                                      
+        vec = [rand(F) for _ in 1:(n + m + 1)] 
         evals = [derv(vec...) for derv in dervs]
-                
-        for j in 1:(minpoly_ord + 1)
+               
+        for j in 1:(minpoly_ord + m + 1)
             supp = var_to_sup(j)
             ind = supp_to_index[supp]
-            M[i, ind] = evals[j]
+            if j > m
+                M[i, ind] = evals[j - m]
+            else
+                M[i, ind] = vec[findfirst(isequal(ode.parameters[j]), gens(parent(ode)))]
+            end
         end
     end
 
     # filling the rest of the columns
-    for i in (minpoly_ord + 3):lsup
+    for i in (minpoly_ord + m + 3):lsup
         supp = support[i]
         supp_divisor = copy(supp)
         nonzero_ind = findfirst(e -> e > 0, supp_divisor)
         supp_divisor[nonzero_ind] -= 1                                                 
-        multiplier = zeros(Int, minpoly_ord + 1)
+        multiplier = zeros(Int, minpoly_ord + m + 1)
         multiplier[nonzero_ind] += 1
         while !haskey(supp_to_index, supp_divisor)
             nonzero_ind = findfirst(e -> e > 0, supp_divisor)
@@ -313,15 +341,14 @@ function build_matrix_multipoint(F, ode, minpoly_ord, support; info = true)
         mult_ind = get(supp_to_index, multiplier, -1)
         for j in 1:lsup
             if mult_ind == -1
-                multiplier_eval = prod(M[j, 2:(minpoly_ord + 2)] .^ multiplier)
+                multiplier_eval = prod(M[j, 2:(minpoly_ord + m + 2)] .^ multiplier)
             else
                 multiplier_eval = M[j, mult_ind]
             end
             M[j, i] = M[j, supp_div_ind] * multiplier_eval           
         end
     end
-      
-  return M
+    return M
 end
 
 # -------- Auxiliary Functions -------- #
@@ -342,10 +369,11 @@ function qq_to_mod(a::QQFieldElem, p)
     return numerator(a) * invmod(denominator(a), ZZ(p))
 end
 
-function add_unit!(supp, jacobian_rank)
+function add_unit!(supp)
     l_supp = length(supp)
-    for j in 1:(jacobian_rank + 2)         
-        unit = [i == j ? one(ZZ) : zero(ZZ) for i in 1:(jacobian_rank + 1)] 
+    dim = length(first(supp))
+    for j in 1:(dim + 1)         
+        unit = [i == j ? one(ZZ) : zero(ZZ) for i in 1:dim] 
         !(unit in supp) && push!(supp, point_vector(ZZ, unit))  
     end                                                                                                                           
     l_supp < length(supp) && sort_gleb!(supp)
@@ -354,7 +382,7 @@ end
 
 function lie_derivative(poly, ode)
     result = zero(poly)
-    for v in vars(poly)
+    for v in ode.x_vars
         result += derivative(poly, v) * ode.x_equations[v]
     end
     return result

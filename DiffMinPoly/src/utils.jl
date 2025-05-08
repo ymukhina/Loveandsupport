@@ -1,3 +1,14 @@
+"""
+    subtotal_degree(poly, vars)
+
+Computes the total degree of a polynomial wrt a subset of variables
+"""
+
+function subtotal_degree(poly, vars)
+    mask = [(v in vars) for v in gens(parent(poly))]
+    return maximum(map(e -> sum(e[mask]), exponent_vectors(poly)))
+end
+
 # -------- Generating random dense models -------- #
 
 function all_monomials(deg, vars)
@@ -5,8 +16,8 @@ function all_monomials(deg, vars)
     degs = [collect(0:deg) for v in vars]
 
     for m in IterTools.product(degs...)
-        if sum(m) <= deg
-            push!(result, prod([v^e for (v, e) in zip(vars, m)]))
+        if reduce(+, m, init = 0) <= deg
+            push!(result, reduce(* , [v^e for (v, e) in zip(vars, m)], init = 1))
         end
     end
 
@@ -70,8 +81,8 @@ function rand_ode(degs::Vector{Tuple{Int, Int}}; char=0, num_params=0)
     return StructuralIdentifiability.ODE{Ptype}(
         vars[1:n-1],
         [vars[end]],
-        Dict(vars[i] => rand_poly(degs[i], [vars[1:n-1], vars[(n:n + num_params)]]) for i in 1:n-1),
-        Dict(vars[end] => rand_poly(degs[n], [vars[1:n-1], vars[n:n + num_params]])),
+        Dict(vars[i] => rand_poly(degs[i], [vars[1:n-1], vars[(n:n + num_params - 1)]]) for i in 1:n-1),
+        Dict(vars[end] => rand_poly(degs[n], [vars[1:n-1], vars[n:n + num_params - 1]])),
         Ptype[]
     )
 end

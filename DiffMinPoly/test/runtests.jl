@@ -34,6 +34,16 @@ for ds in generics_y
     push!(cases, rand_ode(ds))
 end
 
+generics_params = [
+    [(1, 1), (1, 0)],
+    [(1, 1), (1, 1)],
+    [(2, 1), (1, 1)],
+]
+
+for ds in generics_params
+    push!(cases, rand_ode(ds, num_params = 2))
+end
+
 push!(
     cases,
     @ODEmodel(

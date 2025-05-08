@@ -1,8 +1,10 @@
-include("../src/solver_love_and_support.jl")
 using Oscar
 using Nemo
 using StructuralIdentifiability
-import StructuralIdentifiability: _reduce_mod_p, reduce_ode_mod_p, power_series_solution, ps_diff 
+import StructuralIdentifiability: _reduce_mod_p, reduce_ode_mod_p, power_series_solution, ps_diff, switch_ring
+
+using DiffMinPoly
+using DiffMinPoly: f_min_support
 
 const Ptype = QQMPolyRingElem
 
@@ -31,11 +33,11 @@ function check_ansatz_modp(ode::ODE, p::Int)
     n = ngens(R)
     # the worst thing in the known universe
     svnames = (string).(S.S)
-    y_index = findfirst(vname -> vname == "y(t)_0", svnames)
+    y_index = findfirst(isequal("y(t)_0"), svnames)
     ys = gens(S)[y_index:y_index+(n-1)]
-    @info "IO variables $(ys)"
+    params = [switch_ring(p, S) for p in ode.parameters]
 
-    phi = hom(R, S, ys)
+    phi = hom(R, S, vcat(params, ys))
 
     quot, rem = divrem(phi(io_tocheck), io_correct)
     return iszero(rem) && iszero(total_degree(quot)) && !iszero(quot)
@@ -45,7 +47,7 @@ end
 function check_ansatz(ode::ODE)
 
     @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = eliminate(ode)
+    tim = @elapsed io_tocheck = DiffMinPoly.eliminate(ode)
     @info "time: $(tim) seconds"
    
 
@@ -58,14 +60,14 @@ function check_ansatz(ode::ODE)
     R = parent(io_tocheck)
     S = parent(io_correct)
         
-    n = ngens(R) 
+    n = ngens(R) - length(ode.parameters) 
   
     svnames = (string).(S.S)
     y_index = findfirst(vname -> vname == "y(t)_0", svnames)
     ys = gens(S)[y_index:y_index+(n-1)]
-    @info "IO variables $(ys)"    
+    params = [switch_ring(p, S) for p in ode.parameters]
 
-    phi = hom(R, S, ys)
+    phi = hom(R, S, vcat(params, ys))
     quot, rem = divrem(phi(io_tocheck), io_correct)
     return iszero(rem) && iszero(total_degree(quot)) && !iszero(quot)
 end
