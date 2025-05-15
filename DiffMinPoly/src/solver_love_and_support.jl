@@ -209,8 +209,8 @@ function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
         if d <= D
             ineq_lhs = reshape([1, [d + (k - 1) * (D - 1) for k in 1:n]...], 1, n + 1)
             ineq_rhs = [prod([d + (k - 1) * (D - 1) for k in 1:n])]
-            A = vcat(matrix(QQ, ineq_lhs), -identity_matrix(QQ, n + 1))
-            b = vcat(ineq_rhs, zeros(QQ, n + 1))
+            A_final = vcat(matrix(QQ, ineq_lhs), -identity_matrix(QQ, n + 1))
+            b_final = vcat(ineq_rhs, zeros(QQ, n + 1))
         else
             ineq_lhs1 = [k <= l ? k * (D - 1) + 1 : 0 for l in 0:(n - 1), k in 0:n]
             ineq_lhs2 = zeros(Int, n, n + 1)
@@ -225,8 +225,8 @@ function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
                 fac2 = prod(Vector{Int}([i * (d - 1) + l * (D - 1) + 1 for i in 1:(n - l)]))
                 ineq_rhs[l+1] = fac1 * fac2
             end
-            A = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
-            b = vcat(ineq_rhs, zeros(QQ, n + 1))
+            A_final = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
+            b_final = vcat(ineq_rhs, zeros(QQ, n + 1))
         end
     else
         # bound from the new paper (todo: precise reference)
@@ -243,14 +243,31 @@ function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
         D = Dx + Dp
 
         # parameters first
-        ineq_lhs = reshape(vcat([1 for _ in ode.parameters], [d + (k - 1) * (D - 1) for k in 1:(n + 1)]), 1, n + m + 1)
-        ineq_rhs = [prod([d + (k - 1) * (D - 1) for k in 1:(n + 1)])]
+        ineq_lhs_bezout = reshape(vcat([1 for _ in ode.parameters], [d + (k - 1) * (D - 1) for k in 1:(n + 1)]), 1, n + m + 1)
+        ineq_rhs_bezout = [prod([d + (k - 1) * (D - 1) for k in 1:(n + 1)])]
+
+        ineq_lhs_param = reshape(vcat( [1 for _ in ode.parameters], [dp + (k - 1) * Dp  for k in 1:(n + 1)]), 1, n + m + 1)
+        ineq_rhs_param = [sum((max(1,dp) + (i - 1) * Dp) * prod(dx + (j - 1) * (Dx - 1) for j in 1:(n + 1) if j != i) for i in 1:( n + 1))]
     
+        ineq_lhs = reshape(vcat([0 for _ in ode.parameters], [dx + (k - 1) * (Dx - 1) for k in 1:(n + 1)]), 1, n + m + 1)
+        ineq_rhs = [prod([dx + (k - 1) * (Dx - 1) for k in 1:(n + 1)])]
+    
+    
+        A_bezout = vcat(matrix(QQ, ineq_lhs_bezout), -identity_matrix(QQ, n + m + 1))
+        b_bezout = vcat(ineq_rhs_bezout, zeros(QQ, n + m + 1))
+
+        A_param = vcat(matrix(QQ, ineq_lhs_param), -identity_matrix(QQ, n + m + 1))
+        b_param = vcat(ineq_rhs_param, zeros(QQ, n + m + 1))
+
         A = vcat(matrix(QQ, ineq_lhs), -identity_matrix(QQ, n + m + 1))
         b = vcat(ineq_rhs, zeros(QQ, n + m + 1))
+
+        A_final = vcat(A_bezout, A_param, A)
+        b_final = vcat(b_bezout, b_param, b)
+
     end
 
-    return sort_gleb!(collect(lattice_points(Oscar.polyhedron(A, b))))
+    return sort_gleb!(collect(lattice_points(Oscar.polyhedron(A_final, b_final))))
 end
 
 # -------- Functions for test of correctness -------- #
