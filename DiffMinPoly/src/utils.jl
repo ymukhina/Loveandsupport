@@ -36,7 +36,9 @@ function rand_poly(deg, vars)
     result = 0
 
     for m in IterTools.product([all_monomials(d, v) for (d, v) in zip(deg, vars)]...)
-        monom = rand(-10:10) * prod(m)
+        c = rand(-10:10)
+        c = (c == 0) ? 1 : c
+        monom = c * prod(m)
         result += monom
     end
 
