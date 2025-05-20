@@ -195,7 +195,7 @@ end
 function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
     n = jacobian_rank
     m = length(ode.parameters)
-    
+  
     y = first(values(ode.y_equations))
 
     if (y in ode.x_vars) && m == 0
@@ -228,6 +228,18 @@ function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
             A_final = vcat(matrix(QQ, ineq_lhs1 + ineq_lhs2), -identity_matrix(QQ, n + 1))
             b_final = vcat(ineq_rhs, zeros(QQ, n + 1))
         end
+    elseif  m == 0
+            d = maximum(total_degree(ode.y_equations[ode.y_vars[1]]))
+            D = maximum(total_degree(ode.x_equations[x]) for x in ode.x_vars)
+            D = max(D, 0)
+        
+            info && @info "We have d = $d and D = $D"
+        
+            ineq_lhs = reshape([d + (k - 1) * (D - 1) for k in 1:n+1], 1, n+1)
+            ineq_rhs = [prod([d + (k - 1) * (D - 1) for k in 1:n+1])]
+        
+            A_final = vcat(matrix(QQ, ineq_lhs), -identity_matrix(QQ, n + 1))
+            b_final = vcat(ineq_rhs, zeros(QQ, n + 1))
     else
         # bound from the new paper (todo: precise reference)
         @info "The output is not a single variable or there are parameters, using the general bound"
@@ -247,11 +259,10 @@ function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
         ineq_rhs_bezout = [prod([d + (k - 1) * (D - 1) for k in 1:(n + 1)])]
 
         ineq_lhs_param = reshape(vcat( [1 for _ in ode.parameters], [dp + (k - 1) * Dp  for k in 1:(n + 1)]), 1, n + m + 1)
-        ineq_rhs_param = [sum((max(1,dp) + (i - 1) * Dp) * prod(dx + (j - 1) * (Dx - 1) for j in 1:(n + 1) if j != i) for i in 1:( n + 1))]
+        ineq_rhs_param = [sum((dp + (i - 1) * Dp) * prod(dx + (j - 1) * (Dx - 1) for j in 1:(n + 1) if j != i) for i in 1:( n + 1))]
     
         ineq_lhs = reshape(vcat([0 for _ in ode.parameters], [dx + (k - 1) * (Dx - 1) for k in 1:(n + 1)]), 1, n + m + 1)
         ineq_rhs = [prod([dx + (k - 1) * (Dx - 1) for k in 1:(n + 1)])]
-    
     
         A_bezout = vcat(matrix(QQ, ineq_lhs_bezout), -identity_matrix(QQ, n + m + 1))
         b_bezout = vcat(ineq_rhs_bezout, zeros(QQ, n + m + 1))
@@ -264,6 +275,7 @@ function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
 
         A_final = vcat(A_bezout, A_param, A)
         b_final = vcat(b_bezout, b_param, b)
+        
 
     end
 
