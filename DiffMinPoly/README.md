@@ -11,7 +11,7 @@ The package can be installed from this repository by
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/ymukhina/Loveandsupport.git", subdir="DiffMinPoly")
+Pkg.add(url="https://github.com/ymukhina/Loveandsupport.git", subdir="DiffMinPoly", rev="y-input")
 ```
 
 ## How to use
@@ -21,8 +21,8 @@ The package can be loaded by `using DiffMinPoly`.
 For the ODE system 
 ``` math 
 \begin{cases} 
-    x_1' = x_2^2,\\
-    x_2' = x_1.
+    x_1' = a_1 x_2,\\
+    x_2' = a_2 x_1.
     \end{cases} 
 ```
 to perform the elimination for variable $x_1$ we use the function `eliminate`. 
@@ -34,17 +34,17 @@ using StructuralIdentifiability
 
 
 ode = @ODEmodel(
-    x1'(t) = x2(t)^2,
-    x2'(t) = x1(t),
-    y(t) = x1(t)
-)
+                  x1'(t) = a1 * x2(t),
+                  x2'(t) = a2 * x1(t),
+                  y(t) = x1(t) + x2(t)
+              )
 
-eliminate(ode, x1)
+eliminate(ode)
 ```
 will return
 
 ```
-x1(t)^2*x1(t)^(1) - 1//4*x1(t)^(2)^2
+a1*a2*y(t) - y(t)^(2)
 ```
 
 
