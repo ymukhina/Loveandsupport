@@ -61,5 +61,7 @@ Maintained by Yulia Mukhina (yulia.mukhina@lix.polytechnique.fr) and Gleb Pogudi
 
 ## References
 
-Based on the paper [Projecting dynamical systems via a support bound](https://arxiv.org/abs/2501.13680), preprint, 2025
+Based on
+ * [Projecting dynamical systems via a support bound](https://arxiv.org/abs/2501.13680), preprint, 2025
+ * *Support bound for differential elimination in polynomial dynamical systems*, preprint, 2025
 
