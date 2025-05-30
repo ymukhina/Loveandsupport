@@ -1,0 +1,12 @@
+with(DifferentialThomas):
+with(Tools):
+Ranking([t], [[x1, x2], [y] ]);
+
+
+sys := [
+ diff(x2(t), t) - (47*x1(t)^2*a1 - 90*x1(t)^2 - 12*x1(t)*x2(t)*a1 - 92*x1(t)*x2(t) - 17*x1(t)*a1 + 72*x1(t) - 30*x2(t)^2*a1 - 22*x2(t)^2 + 88*x2(t)*a1 + 13*x2(t) - 21*a1 + 85),
+ diff(x1(t), t) - (62*x1(t)^2*a1 + 22*x1(t)^2 - 47*x1(t)*x2(t)*a1 + 81*x1(t)*x2(t) - 64*x1(t)*a1 + 33*x1(t) - 77*x2(t)^2*a1 - 56*x2(t)^2 - 17*x2(t)*a1 - 59*x2(t) - 22*a1 - 71),
+ y(t) - (8*x1(t)^2 - 49*x1(t)*x2(t) - 97*x1(t) + 25*x2(t)^2 - 34*x2(t) - 55)
+];
+
+res := CodeTools[CPUTime](ThomasDecomposition(sys));

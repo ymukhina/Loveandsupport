@@ -1,6 +1,6 @@
 using Test
-using DiffMinPoly
 using StructuralIdentifiability
+using DiffMinPoly
 
 include("test_utils.jl")
 
@@ -9,18 +9,39 @@ cases = []
 generics = [
     [2, 1, 1],
     [2, 2, 2],
-    #[2, 3, 3],
-    #[2, 4, 4], 
-    #[2, 5, 5],  
-    #[3, 1, 1], 
-    #[3, 2, 2],
-    #[3, 3, 3],
-    #[1,2,2,2],
-    #[2,1,1,1],  
+#   [2, 3, 3],
+#   [2, 4, 4], 
+#   [2, 5, 5],  
+#   [3, 1, 1], 
+#   [3, 2, 2],
+#   [3, 3, 3],
+#   [1,2,2,2],
+#   [2,1,1,1],  
 ]
 
 for ds in generics
+    push!(cases, rand_ode_x(ds))
+end
+
+generics_y = [
+    [2, 1],
+    [2, 1, 1],
+    [1, 1, 2],
+    [2, 2, 2],
+]
+
+for ds in generics_y
     push!(cases, rand_ode(ds))
+end
+
+generics_params = [
+    [(1, 1), (1, 0)],
+    [(1, 1), (1, 1)],
+    [(2, 1), (1, 1)],
+]
+
+for ds in generics_params
+    push!(cases, rand_ode(ds, num_params = 2))
 end
 
 push!(
@@ -50,10 +71,7 @@ push!(
         x2'(t) = 2^31 * x2(t)^2 + 2^15 * x1(t) + 17,
         x3'(t) = 19 * x1(t) + 95 * x2(t),
         y(t) = x1(t)
-    ),
-    
-    
-    
+    ),    
 )
 
 @testset "Testing against the standard algorithms" begin
@@ -61,3 +79,4 @@ push!(
         @test check_ansatz(c)
     end
 end
+

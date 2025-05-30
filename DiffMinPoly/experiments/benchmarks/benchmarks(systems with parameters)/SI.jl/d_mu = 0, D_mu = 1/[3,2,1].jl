@@ -1,0 +1,15 @@
+using StructuralIdentifiability
+
+include("../../../../../src/solver_love_and_support.jl")
+include("../../../../../src/utils.jl")
+
+ode_prec = rand_ode([2,1])
+first(values(find_ioequations(ode_prec)))
+
+ode = @ODEmodel(
+               x1'(t) =90*x1(t)^3*a1 + 7*x1(t)^3 - 18*x1(t)^2*x2(t)*a1 - 97*x1(t)^2*x2(t) + 9*x1(t)^2*a1 - 68*x1(t)^2 + 95*x1(t)*x2(t)^2*a1 + 65*x1(t)*x2(t)^2 - 36*x1(t)*x2(t)*a1 + 91*x1(t)*x2(t) + 70*x1(t)*a1 + 3*x1(t) + 4*x2(t)^3*a1 + 47*x2(t)^3 + 82*x2(t)^2*a1 - 6*x2(t)^2 - 61*x2(t)*a1 - 32*x2(t) - 8*a1 + 83,
+               x2'(t) = -67*x1(t)^3*a1 + 64*x1(t)^3 - 54*x1(t)^2*x2(t)*a1 + 50*x1(t)^2*x2(t) + 61*x1(t)^2*a1 + 56*x1(t)^2 + 56*x1(t)*x2(t)^2*a1 - 35*x1(t)*x2(t)^2 - 62*x1(t)*x2(t)*a1 - 34*x1(t)*x2(t) + 42*x1(t)*a1 + 49*x1(t) + 98*x2(t)^3*a1 + 78*x2(t)^3 - 65*x2(t)^2*a1 - 96*x2(t)^2 - 41*x2(t)*a1 - 89*x2(t) - 19*a1 + 63,
+               y(t) =   -60*x1(t)^2 + 6*x1(t)*x2(t) - 60*x1(t) + 32*x2(t)^2 + 42*x2(t) - 73
+           )
+
+tim = @elapsed io_correct = first(values(find_ioequations(ode)))  
