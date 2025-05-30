@@ -25,7 +25,13 @@ For the ODE system
     x_2' = a_2 x_1.
     \end{cases} 
 ```
-to perform the elimination for variable $x_1$ we use the function `eliminate`. 
+and 
+
+``` math 
+    y = x_1 + x_2
+```
+
+to perform the elimination for the chosen function of the coordinates we use the function `eliminate`. 
 For instance:
 
 ```julia
