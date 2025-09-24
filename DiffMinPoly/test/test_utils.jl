@@ -11,12 +11,11 @@ const Ptype = QQMPolyRingElem
 # test ansatz against IO enemy equation 
 function check_ansatz_modp(ode::ODE, p::Int)
 
-    x = first(sort(ode.x_vars, rev = true))
-    ord = DiffMinPoly.minpoly_order(ode, x) 
-    possible_supp = DiffMinPoly.f_min_support(ode, x, ord)
+    ord = DiffMinPoly.minpoly_order(ode) 
+    possible_supp = DiffMinPoly.f_min_support(ode, ord)
     
     @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, x, p, ord, possible_supp; info = false)
+    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, p, ord, possible_supp; info = false)[1]
     @info "time: $(tim) seconds"
 
     @info "Solving without love and support :("
@@ -44,14 +43,11 @@ function check_ansatz_modp(ode::ODE, p::Int)
     return iszero(rem) && iszero(total_degree(quot))
 end
 
-# Gleb: there are no tests for the main function!
-# Yulia: Changed to eliminate below
+
 function check_ansatz(ode::ODE)
         
-    x = first(sort(ode.x_vars, rev = true))    
-
     @info "Solving with Love & Support!"
-    tim = @elapsed io_tocheck = DiffMinPoly.eliminate(ode, x)
+    tim = @elapsed io_tocheck = DiffMinPoly.eliminate(ode)
     @info "Time: $(tim) seconds"
    
 
