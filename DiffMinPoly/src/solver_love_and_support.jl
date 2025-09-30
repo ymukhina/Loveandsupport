@@ -59,7 +59,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, ord::Int=minpoly
     high_deg = possible_supp[end][1]
     print(high_deg)
   
-    if x in ode.x_vars && m == 0 &&  high_deg > 2 
+    if x in ode.x_vars && m == 0 &&  (high_deg > 2) && (length(ode.x_vars) == 1)
    
         x_mod_p = switch_ring(x, ode_mod_p.poly_ring)
         dervs, ks, l = compute_derivatives_and_determine_splits(ode_mod_p, x_mod_p, ord, possible_supp, info=info)
@@ -339,108 +339,7 @@ function eliminate_with_love_and_support(ode::ODE, starting_prime::Int)
     g = sum([s * m for (s, m) in zip(sol_vector, mons)])
     return g, starting_prime
 end 
-
-
-# function eliminate_with_love_and_support(ode::ODE, starting_prime::Int)
-#     # minpoly_ord = minpoly_order(ode) 
-#     # possible_supp = f_min_support(ode, minpoly_ord)
-#     # l_supp = length(possible_supp)
-#     # R, _ = polynomial_ring(QQ, [var_to_str(x), [var_to_str(x) * "^($i)" for i in 1:minpoly_ord]...])
-
-#     minpoly_ord = minpoly_order(ode) 
-#     possible_supp = f_min_support(ode, minpoly_ord)
-#     l_supp = length(possible_supp)
-#     y_var = only(ode.y_vars)
-#     R, _ = polynomial_ring(
-#         QQ,
-#         vcat(
-#             [var_to_str(p) for p in ode.parameters],
-#             [var_to_str(y_var)],
-#             [var_to_str(y_var) * "^($i)" for i in 1:minpoly_ord],
-#         )
-#     )
- 
-#     prod_of_done_primes = one(ZZ)
-#     prim_cnt = 0
- 
-#     sol_vector = zeros(QQ, l_supp)
-#     crts = zeros(ZZ, l_supp)
-#     found_cand = falses(l_supp)
-#     is_stable = falses(l_supp)
-#     ker_t, mat_t = 0, 0
-    
-#     is_first_prime = true
-#     while !all(is_stable)
-#         @label nxt_prm 
-        
-
-#         starting_prime = Hecke.next_prime(starting_prime)
-#         p = ZZ(starting_prime)                                        
-#         prim_cnt += 1
-        
-#         @info "Chose $prim_cnt th prime $p, $(length(findall(is_stable))) stable coefficients"
-#         sol_mod_p, m_t, k_t = eliminate_with_love_and_support_modp(ode, Int(p), minpoly_ord, possible_supp)  
-
-#         ker_t += k_t
-#         mat_t += m_t
-
-#         if is_first_prime
-
-#             filter!(exp -> !iszero(coeff(sol_mod_p, Vector{Int}(exp))), possible_supp)
-#             add_unit!(possible_supp, minpoly_ord)
-#             l_supp = length(possible_supp)
-#             resize!(sol_vector, l_supp)
-#             resize!(crts, l_supp)
-#             resize!(found_cand, l_supp)
-#             resize!(is_stable, l_supp)
-#             @info "Updated Support. New Size is $(length(possible_supp))"
-
-#             is_first_prime = false
-#             starting_prime = Hecke.next_prime(rand(2^32:2^62))
-#         end
-    
-#         sol_vector_mod_p = [coeff(sol_mod_p, Vector{Int}(exp)) for exp in possible_supp]
-#         for (i, a) in enumerate(sol_vector_mod_p)
-#             is_stable[i] && continue
-
-#             if found_cand[i]
-#                 if Oscar.divides(denominator(sol_vector[i]), p)[1]
-#                     @info "Bad Prime. Restarting..."
-#                     @goto nxt_prm
-#                 end
-#                 sol_i_mod_p = qq_to_mod(sol_vector[i], p)
-#                 if sol_i_mod_p == sol_vector_mod_p[i]
-#                     is_stable[i] = true
-#                     continue
-#                 end
-#             end
-
-#             crts[i] = crt(Oscar.lift(ZZ, a), p, ZZ(crts[i]), prod_of_done_primes)
-           
-#             succ, r, s = rational_reconstruction(
-#                 crts[i],
-#                 ZZ(p * prod_of_done_primes)
-#             )
-#             if succ
-#                 sol_vector[i] = r//s
-#                 found_cand[i] = true
-#             end
-#         end
-
-#         prod_of_done_primes *= p
-#     end 
-
-#     println("#------------------------------------------------------------#")
-#     @info "Overall Matrix Building: $mat_t"
-#     @info "Overall Kernel Computation: $ker_t"
-#     println("#------------------------------------------------------------#")
-
-#     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
-#     g = sum([s * m for (s, m) in zip(sol_vector, mons)])
-#     return g, starting_prime
-# end 
-                                    
-                       
+                   
 # -------- estimate support for f_min based on Theorem 1  -------- #
 
 function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
@@ -493,7 +392,7 @@ function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
         A_final = vcat(matrix(QQ, ineq_lhs), -identity_matrix(QQ, n + 1))
         b_final = vcat(ineq_rhs, zeros(QQ, n + 1))
     else
-        # bound from the new paper (todo: precise reference)
+        # Bound using Theorem 1 from https://arxiv.org/abs/2506.08824
         @info "The output is not a single variable or there are parameters, using the general bound"
         dx, dp = subtotal_degree(y, ode.x_vars), subtotal_degree(y, ode.parameters)
         Dx = maximum(subtotal_degree(ode.x_equations[x], ode.x_vars) for x in ode.x_vars)
