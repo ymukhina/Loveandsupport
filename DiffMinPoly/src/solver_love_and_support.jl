@@ -58,8 +58,10 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, ord::Int=minpoly
     x = first(values(ode.y_equations))
     high_deg = possible_supp[end][1]
     print(high_deg)
+
+    use_optimized = (x in ode.x_vars) && (m == 0) && (high_deg > 2)
   
-    if x in ode.x_vars && m == 0 &&  (high_deg > 2) && (length(ode.x_vars) == 1)
+    if use_optimized
    
         x_mod_p = switch_ring(x, ode_mod_p.poly_ring)
         dervs, ks, l = compute_derivatives_and_determine_splits(ode_mod_p, x_mod_p, ord, possible_supp, info=info)
@@ -260,6 +262,12 @@ function eliminate_with_love_and_support(ode::ODE, starting_prime::Int)
             [var_to_str(y_var) * "^($i)" for i in 1:minpoly_ord],
         )
     )
+
+    m = length(ode.parameters)
+    x = first(values(ode.y_equations))
+    high_deg = possible_supp[end][1]
+
+    use_optimized = (x in ode.x_vars) && (m == 0) && (high_deg > 2)
  
     prod_of_done_primes = one(ZZ)
     prim_cnt = 0
@@ -288,6 +296,11 @@ function eliminate_with_love_and_support(ode::ODE, starting_prime::Int)
         if is_first_prime
             filter!(exp -> !iszero(coeff(sol_mod_p, Vector{Int}(exp))), possible_supp)
             add_unit!(possible_supp)
+            if use_optimized
+                sort_gleb_max!(possible_supp)
+            else
+                sort_gleb!(possible_supp)
+            end  
             l_supp = length(possible_supp)
             resize!(sol_vector, l_supp)
             resize!(crts, l_supp)
