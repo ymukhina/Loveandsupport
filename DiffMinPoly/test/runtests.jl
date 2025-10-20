@@ -13,7 +13,7 @@ generics = [
     [2, 2],
     [1, 2, 2],
     [2, 1, 1],
-    # [2, 2, 2],
+    [2, 2, 2],
     # [2, 3, 3],
     # [2, 4, 4], 
     # [2, 5, 5],  
@@ -27,6 +27,7 @@ generics = [
 for ds in generics
     push!(cases, rand_ode_x(ds))
     push!(cases, rand_ode(ds))
+   # push!(cases, rand_ode([3,2,2,1]))
 end
 
 push!(
@@ -35,7 +36,7 @@ push!(
     @ODEmodel(
         x1'(t) = x1(t) + 3 * x1(t) * x2(t),
         x2'(t) = -5 * x2(t) + x1(t) * x2(t),
-        y(t) = x1(t) + x2(t)
+        y(t) = x1(t)^2 + x2(t)
     ),
 
     @ODEmodel(
@@ -45,32 +46,86 @@ push!(
     ),
 
     @ODEmodel(
-        x1'(t) = 2 * x1(t)^2 + 17*x2(t)^2 + 3*x3(t)^2 + 1,
-        x2'(t) = x2(t)^2,
-        x3'(t) = x3(t)^2,
-        y(t) = x1(t)
-     ),
- 
+        x1'(t) = 3*x1(t) - x2(t)^2,
+        x2'(t) = -3 * x2(t) + 2*x1(t) * x2(t),
+        y(t) = x2(t) + x1(t)
+    ),
+
     @ODEmodel(
-       x1'(t) = 2^5 * x1(t)^2 - 3^4 * x2(t) + 7 - 9 * x3(t)*x2(t),             
-       x2'(t) = 2^3 * x1(t) + x3(t)^2 + 5 + x2(t)^2,             
-       x3'(t) = -2 * x3(t)*x2(t) + 2^4 * x1(t) * x2(t)^2,             
-       y(t) = x1(t)
+        x1'(t) = 3*x1(t) - x2(t)^2,
+        x2'(t) = -3 * x2(t)^2 + 2*x1(t) * x2(t),
+        y(t) = x2(t) + x1(t)
+    ),
+
+
+    @ODEmodel(
+        x1'(t) = 3*x1(t) - x2(t)^2,
+        x2'(t) = -3 * x2(t)^2 + 2*x1(t) * x2(t),
+        y(t) = 3*x2(t) + 45*x1(t) 
+    ),
+
+    @ODEmodel(
+        x1'(t) = 3*x1(t) - x2(t)^3,
+        x2'(t) = -3 * x2(t)^3 + 2*x1(t) * x2(t),
+        y(t) = 2*x2(t) + 5*x1(t) 
+    ),
+
+    @ODEmodel(
+        x1'(t) = 3*x1(t) - x2(t)^2,
+        x2'(t) = -3 * x2(t)^2 + 2*x1(t) * x2(t),
+        y(t) = 3*x2(t) 
+    ),
+
+    @ODEmodel(
+        x1'(t) = 3*x1(t) - x2(t)^2,
+        x2'(t) = -3 * x2(t)^2 + 2*x1(t) * x2(t),
+        x3'(t) = 6 * x2(t)^2 + 9*x1(t) * 32*x2(t) + 16*x1(t),
+        y(t) = x1(t) + 7*x2(t) 
+    ),
+
+    @ODEmodel(
+        x1'(t) = 3*x1(t)^3 - x2(t)^2,
+        x2'(t) = -3 * x2(t)^2 + 2*x1(t) * x2(t),
+        x3'(t) = 6 * x2(t)^2 + 9*x1(t) * 32*x2(t) + 16*x1(t),
+        y(t) = x1(t) + 5 * x2(t) 
     ),
     
+
     @ODEmodel(
-       x1'(t) = 2^31 * x1(t)^2 + 2^32 *x2(t)^2 + 3^18 *x3(t)^2 + 2^30,
-       x2'(t) = 2^31 * x2(t)^2 + 2^15 * x1(t),
-       x3'(t) = 2^12 * x3(t)^2 + 2^12 * x1(t) + 2^11 * x2(t)^2,
-       y(t) = x1(t)
+        x1'(t) = 3*x3(t) - x2(t),
+        x2'(t) = -3 * x2(t) + 2*x1(t) * x2(t),
+        x3'(t) = 6 * x1(t) +  32*x3(t),
+        y(t) = x1(t) + 35 * x3(t) + x2(t)
     ),
-    
+
     @ODEmodel(
-       x1'(t) = 3 * x1(t)^2 + 16 * x2(t)^2 + 18 * x1(t) + 42,
-       x2'(t) = 2^31 * x2(t)^2 + 2^15 * x1(t) + 17,
-       x3'(t) = 19 * x1(t) + 95 * x2(t),
-       y(t) = x1(t)
+        x1'(t) = 3*x1(t)^3 - x2(t)^2,
+        x2'(t) = -3 * x2(t)^2 + 2*x1(t) * x2(t),
+        x3'(t) = 6 * x2(t)^2 + 9*x1(t) * 32*x2(t) + 16*x1(t),
+        y(t) = x1(t) + 5 * x2(t) + 1
     ),
+
+    @ODEmodel(
+        x1'(t) = 3*x1(t) - x2(t)^2,
+        x2'(t) = -3 * x2(t)^2 + 2*x1(t) * x2(t),
+        y(t) = 3*x2(t) + 3 
+    ),
+
+
+    @ODEmodel(
+        x1'(t) = 3*x1(t) - x2(t)^2,
+        x2'(t) = -3 * x2(t)^2 + 2*x1(t) * x2(t),
+        y(t) = 3*x2(t) + 45*x1(t)  + 13
+    ),
+
+    @ODEmodel(
+        x1'(t) = 3*x3(t) - x2(t),
+        x2'(t) = -3 * x2(t) + 2*x1(t) * x2(t),
+        x3'(t) = 6 * x1(t) +  32*x3(t),
+        y(t) = x1(t) + 35 * x3(t) + 6
+    ),
+
+
 )
 
 @testset "Testing against the standard algorithms" begin

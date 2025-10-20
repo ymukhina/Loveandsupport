@@ -57,23 +57,35 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, ord::Int=minpoly
     m = length(ode.parameters)
     x = first(values(ode.y_equations))
     high_deg = possible_supp[end][1]
-    print(high_deg)
 
-    use_optimized = (x in ode.x_vars) && (m == 0) && (high_deg > 2)
+    
+    d = total_degree(x)
+
+    use_optimized = (x == ode.x_vars[1]) && (m == 0) && (high_deg > 2)
+    linear_y = (d == 1) && (m == 0) && !(x == ode.x_vars[1]) && (high_deg > 2)  
   
     if use_optimized
-   
-        x_mod_p = switch_ring(x, ode_mod_p.poly_ring)
-        dervs, ks, l = compute_derivatives_and_determine_splits(ode_mod_p, x_mod_p, ord, possible_supp, info=info)
-        ker, dim, build_mat, solve_ker = process_matrices_and_solve_kernel(n, dervs, ord, possible_supp, ks, l, info=info)
+            y_poly = switch_ring(x, ode_mod_p.poly_ring)
+            #x_mod_p = switch_ring(x, ode_mod_p.poly_ring)
+            dervs, ks, l = compute_derivatives_and_determine_splits(ode_mod_p, y_poly, ord, possible_supp, info=info)
+            ker, dim, build_mat, solve_ker = process_matrices_and_solve_kernel(ode_mod_p, n, dervs, y_poly, ord, possible_supp, ks, l, info=info)
     
-        info && @info "Matrix building took $build_mat"
-        info && @info "Kernel computation took $solve_ker"
-
+            info && @info "Matrix building took $build_mat"
+            info && @info "Kernel computation took $solve_ker"
+    elseif linear_y
+            print("linear case")
+            y_poly = first(values(ode_mod_p.y_equations))
+            dervs, ks, l = compute_derivatives_and_determine_splits(ode_mod_p, y_poly, ord, possible_supp, info=info)
+            ker, dim, build_mat, solve_ker =  process_matrices_and_solve_kernel(ode_mod_p, n, dervs, y_poly, ord, possible_supp, ks, l, info=info)
+            info && @info "Matrix building took $build_mat"
+            info && @info "Kernel computation took $solve_ker"
     else
+        print("General")
         ker, dim = general_kernel(ode_mod_p, F, ord, possible_supp)
         build_mat = 0
         solve_ker = 0
+        info && @info "Matrix building took $build_mat"
+        info && @info "Kernel computation took $solve_ker"
     end
 
     result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
@@ -118,7 +130,7 @@ function compute_derivatives_and_determine_splits(ode_mod_p, x_mod_p, ord::Int, 
     return dervs, ks, l
 end
 
-function process_matrices_and_solve_kernel(n, dervs, ord, possible_supp, ks, l; info=true)
+function process_matrices_and_solve_kernel(ode, n, dervs, y_poly, ord, possible_supp, ks, l; info=true)
     solve_ker = 0
     build_mat = 0
 
@@ -144,9 +156,9 @@ function process_matrices_and_solve_kernel(n, dervs, ord, possible_supp, ks, l; 
 # println("Row $i is $((n_rows/l)*100)% of Total Linear System")
         strt = time()
         if i > length(ks)                   # Allows to build only each block row one by one to not overload memory.
-            ls = build_matrix_multipoint(n, dervs, ord, supp, n_rows, info = info)    # Last Block row
+            ls = build_matrix_multipoint(ode, n, dervs, y_poly, ord, supp, n_rows, info = info)    # Last Block row
         else
-            ls = build_matrix_multipoint(n, dervs, ord, supp, n_rows, vanish_deg = Int(i), info = info)   # All other block rows
+            ls = build_matrix_multipoint(ode, n, dervs, y_poly, ord, supp, n_rows, vanish_deg = Int(i), info = info)   # All other block rows
         end 
 
         t = time() - strt
@@ -175,7 +187,7 @@ function process_matrices_and_solve_kernel(n, dervs, ord, possible_supp, ks, l; 
     if dim > 1
         info && @info "Adding $(dim-1) rows to compensate for loss"
         strt = time()
-        E = build_matrix_multipoint(n, dervs, ord, possible_supp, dim-1, info = info)
+        E = build_matrix_multipoint(ode, n, dervs, y_poly, ord, possible_supp, dim-1, info = info)
         t = time() - strt
         build_mat += t
         info && @info "Additional rows added in $(time() - strt)"
@@ -266,8 +278,10 @@ function eliminate_with_love_and_support(ode::ODE, starting_prime::Int)
     m = length(ode.parameters)
     x = first(values(ode.y_equations))
     high_deg = possible_supp[end][1]
+    d = total_degree(x)
 
-    use_optimized = (x in ode.x_vars) && (m == 0) && (high_deg > 2)
+    use_optimized = (x == ode.x_vars[1]) && (m == 0) && (high_deg > 2)
+    linear_y = (d == 1) && (m == 0) && !(x == ode.x_vars[1]) && (high_deg > 2)  
  
     prod_of_done_primes = one(ZZ)
     prim_cnt = 0
@@ -296,7 +310,7 @@ function eliminate_with_love_and_support(ode::ODE, starting_prime::Int)
         if is_first_prime
             filter!(exp -> !iszero(coeff(sol_mod_p, Vector{Int}(exp))), possible_supp)
             add_unit!(possible_supp)
-            if use_optimized
+            if use_optimized || linear_y
                 sort_gleb_max!(possible_supp)
             else
                 sort_gleb!(possible_supp)
@@ -361,7 +375,7 @@ function f_min_support(ode::ODE, jacobian_rank::Int; info = true)
   
     y = first(values(ode.y_equations))
 
-    if (y in ode.x_vars) && m == 0
+    if (y == ode.x_vars[1]) && m == 0
         @info "The output is a single variable and there are no parameters, using the refined bound"
         # Bound using Theorem 1 from https://arxiv.org/abs/2501.13680
         d = total_degree(ode.x_equations[y])
@@ -545,8 +559,9 @@ end
 
 
 # This function assumes that support contains the unit vectors and is sorted by `sort_gleb_max!`
-function build_matrix_multipoint(n, dervs, minpoly_ord, support, n_rows; vanish_deg = false, info = true)
-    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1) ]                                           
+function build_matrix_multipoint(ode, n, dervs, y_poly, minpoly_ord, support, n_rows; vanish_deg = false, info = true)
+    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1) ]
+
     F = base_ring(parent(dervs[end]))
 
     support = [Vector{Int64}(p) for p in support]
@@ -560,7 +575,11 @@ function build_matrix_multipoint(n, dervs, minpoly_ord, support, n_rows; vanish_
     if vanish_deg == false
         points = generate_points_base(F, n_rows, n)
     else
-        points = generate_points_dual(F, n_rows, n, vanish_deg)
+        if (y_poly == ode.x_vars[1])
+            points = generate_points_dual(F, n_rows, n, vanish_deg)
+        else
+            points = generate_points_dual_linear(F, n_rows, n, vanish_deg, y_poly)
+        end
     end
 
     R, ε = polynomial_ring(F, "ε")

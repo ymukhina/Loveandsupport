@@ -1,3 +1,5 @@
+using Oscar 
+
 """
     solve_linear_combinations(ls, sol_space, ks)
 
@@ -126,6 +128,116 @@ function generate_points_dual(F, n_points, n_vars, set_x1 = 0)
     end
     return vecs
 end
+
+
+function generate_points_dual_linear(F, n_points, n_vars, set_x1, y_poly)
+
+    R, _ = polynomial_ring(F, "ε")
+    poly_ring = parent(y_poly)
+    total_vars = ngens(poly_ring)
+    
+    units = unit_vectors(F, n_vars+1)
+    coeffs = [coeff(y_poly, m) for m in units]
+    M = matrix(F, 1, length(coeffs), coeffs)
+   
+    const_term = Oscar.coeff(y_poly, [fp_to_int(F(0)) for _ in 1:n_vars+1])
+    
+    if !(const_term == 0)
+        const_term = qq_to_fp(F, const_term)
+        sol = [F(0) for _ in 1:n_vars+1]
+        found = false
+        for i in 1:(n_vars+1)
+            if !iszero(coeffs[i])
+                sol[i] = - const_term / qq_to_fp(F, coeffs[i])
+                found = true
+                break
+            end
+        end
+        
+        if !found && !iszero(const_term)
+            error("No solution exists for the linear equation")
+        end
+    else
+        sol = [F(0) for _ in 1:n_vars+1]
+    end
+        ker = kernel(M, side=:right)
+
+    if set_x1 > 1
+        #Dual number case
+        vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
+        for i in 1:n_points
+            vec_base = zeros(F, total_vars)
+            
+            if ncols(ker) > 0
+                random_coeffs = [rand(F) for _ in 1:n_vars+1]
+                for j in 1:ncols(ker)
+                    for k in 1:n_vars+1 
+                        vec_base[k] += random_coeffs[j] * ker[k, j]
+                    end
+                end
+            else
+                vec_base = [rand(F) for _ in 1:n_vars+1]
+            end
+
+            # Convert to dual numbers by multiplying each component by epsilon
+            vec_dual = Vector{DualNumber{fpFieldElem}}(undef, n_vars+1)
+            for k in 1:n_vars
+                vec_dual[k] =  (Epsilon(Int(set_x1), F)) * (1 - const_term) * vec_base[k]
+            end
+            dual_poly = R(rand(F))
+            vec_dual[n_vars + 1] = DualNumber{fpFieldElem}(dual_poly, set_x1)
+            vecs[i] = vec_dual
+        end
+    else
+        # Regular field elements case
+        vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
+        for i in 1:n_points
+            vec = zeros(F, total_vars)
+            
+            if (ncols(ker) > 0)
+                random_coeffs = [rand(F) for _ in 1:ncols(ker)]
+                for j in 1:ncols(ker)
+                    for k in 1:n_vars+1   
+                        vec[k] += random_coeffs[j] * ker[k, j]
+                    end
+                end
+            else
+                vec = [rand(F) for _ in 1:n_vars+1]
+            end
+            vec = vec + sol
+            vecs[i] = vec
+        end
+    end
+    return vecs
+end
+
+
+function unit_vectors(F, n)
+    units = Vector{Int}[]
+    
+    for i in 1:n
+        vec = [fp_to_int(F(0)) for _ in 1:n]
+        vec[i] = fp_to_int(F(1))
+        push!(units, vec)
+    end
+
+   # push!(units, [fp_to_int(F(0)) for _ in 1:n])
+
+    return units
+end
+
+function fp_to_int(x)
+    return Int(x.data)
+end
+
+function qq_to_fp(F::fpField, x::QQFieldElem)
+    return F(numerator(x)) * inv(F(denominator(x)))
+end
+
+function qq_to_fp(F::fpField, x::fpFieldElem)
+    return x  # Already in the right field, just return it
+end
+
 
 """
     evaluate_at_point(dervs, point, set_x1 = false)
