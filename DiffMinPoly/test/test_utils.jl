@@ -15,13 +15,17 @@ function check_ansatz_modp(ode::ODE, p::Int)
     possible_supp = DiffMinPoly.f_min_support(ode, ord)
     
     @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, p, ord, possible_supp; info = false)[1]
+    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, p, ord, possible_supp; info = true)[1]
+    # io_tocheck *= Oscar.constant_coefficient(io_tocheck)^(-1)
+    # println("with love and support:", io_tocheck)
     @info "time: $(tim) seconds"
 
     @info "Solving without love and support :("
     tim = @elapsed io_correct = first(values(find_ioequations(ode)))
     io_correct = _reduce_mod_p(io_correct, p)
     io_correct *= Oscar.leading_coefficient(io_correct)^(-1)
+    # io_correct *= Oscar.constant_coefficient(io_correct)^(-1)
+    # println("without love and support:", io_correct)
     @info "time: $(tim) seconds"
 
     R = parent(io_tocheck)
@@ -29,8 +33,6 @@ function check_ansatz_modp(ode::ODE, p::Int)
 
     # the variables of io_correct
     n = ngens(R)
-    println(gens(R))
-    println(gens(S))
     # the worst thing in the known universe
     svnames = (string).(S.S)
     y_index = findfirst(vname -> vname == "y(t)_0", svnames)
@@ -53,7 +55,7 @@ function check_ansatz(ode::ODE)
 
     @info "Solving without Love & Support :("
     tim = @elapsed io_correct = first(values(find_ioequations(ode)))
-    io_correct *= (Oscar.leading_coefficient(io_correct)^(-1))
+    io_correct *= Oscar.leading_coefficient(io_correct)^(-1)
     @info "Time: $(tim) seconds"
    
 

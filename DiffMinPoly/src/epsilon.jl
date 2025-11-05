@@ -152,6 +152,7 @@ Base.show(io::IO, d::DualNumber) = begin
 end
 
 function evaluate_poly_with_dual(f::fpMPolyRingElem, args::Vector{DualNumber{fpFieldElem}})
+
     field = base_ring(args[1].poly)
     vanishing_degree = args[1].vanishing_degree
 
@@ -162,21 +163,12 @@ function evaluate_poly_with_dual(f::fpMPolyRingElem, args::Vector{DualNumber{fpF
     coeffs = [coeff(f, i) for i in 1:length(exps)]
 
     for (coeff, exp) in zip(coeffs, exps)
-        if exp[1] >= vanishing_degree
-            continue
-        end
 
         term_poly = R(coeff)
-
         for (i, p) in enumerate(exp)
-            if p > 0
-                if i == 1 && !isnothing(args[1])
-                    dual_pow = args[1]^p
-                    term_poly *= dual_pow.poly
-                elseif i <= length(args) && !isnothing(args[i])
-                    dual_pow = args[i]^p
-                    term_poly *= dual_pow.poly
-                end
+            if p > 0 && !isnothing(args[i]) && i <= length(args)
+                dual_pow = args[i]^p
+                term_poly *= dual_pow.poly
             end
         end
 
