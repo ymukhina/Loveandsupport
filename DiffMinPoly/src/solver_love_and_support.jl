@@ -73,6 +73,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, ord::Int=minpoly
 
      if linear_optimized_case   
         @info "Linear case"
+        @info "MIU"
 
         dervs = lie_derivatives(y_poly, ode_mod_p, ord)
         splits = split_supp(possible_supp, high_deg)

@@ -1,3 +1,41 @@
+using StructuralIdentifiability
+
+"""
+    is_linear(f)
+
+This function checks if a polinomial f linear w.r.t. one of its variables, 
+returns the index of this variable or 0 otherwise.
+
+"""
+
+function is_linear(f)
+
+    n = nvars(parent(f))          
+    remaining = trues(n)          
+    check = zeros(Int, n)
+
+    for exps in collect(Oscar.exponents(f))
+        for i in 1:n
+            if remaining[i] && exps[i] > 1
+                remaining[i] = false
+            else 
+                remaining[i] = true
+                check[i] += exps[i]
+            end
+        end
+        any(remaining) || return nothing
+    end
+
+    for i in 1:n
+        if remaining[i] && check[i] > 0
+            return i 
+        end
+    end
+
+    return 0
+
+end
+
 """
     generate_points_base(F, n_points, n_vars, set_x1 = false)
 
@@ -74,6 +112,64 @@ function solve_linear_equation(F, n_vars, coeffs)
         
 
     return sol
+end
+
+function is_pole(F, r, a)
+    den = denominator(r)
+    return den(a) == F(0)
+end
+
+function has_denominator(r)
+    try
+        denominator(r)
+        return true
+    catch
+        return false
+    end
+end
+
+"""
+    generate_points_rational_parametrization(F, n_points::Int, dual_deg, rp)
+
+For the rational parametrization rp = [rp[1](t), ... , rp[n](t)] generates n_points for t 
+and evaluates rp on the chosen t. Use dual_deg > 1 for the evaluation in dual numbers
+
+"""
+function generate_points_rational_parametrization(F, n_points::Int, dual_deg, rp)
+
+    R, _ = polynomial_ring(F, "ε")
+    if dual_deg > 1
+        vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
+    else
+        vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
+    end
+    
+    i = 1
+    while i <= n_points
+        t = rand(F)
+        @info t
+        bad = false
+        for r in rp
+            if has_denominator(r) && is_pole(F, r, t)
+                bad = true
+                break
+            end
+        end
+        
+        if bad
+            continue  
+        end
+        
+        if dual_deg > 1
+            vecs[i] = [r(t) + rand(F) * Epsilon(Int(dual_deg), F) for r in rp]
+        else
+            vecs[i] = [r(t) for r in rp]
+        end
+        
+        i += 1  
+    end
+    
+    return vecs
 end
 
 
