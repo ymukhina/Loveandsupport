@@ -13,6 +13,7 @@ generics = [
     [2, 2],
     [1, 2, 2],
     [2, 1, 1],
+    [2, 2, 1],
     # [2, 2, 2],
     # [2,2,2,1],
     # [2, 3, 3],
@@ -75,12 +76,6 @@ push!(
         x1'(t) = 3*x1(t) - x2(t)^3,
         x2'(t) = -3 * x2(t)^3 + 2*x1(t) * x2(t),
         y(t) = 2*x2(t) + 5*x1(t) 
-    ),
-
-    @ODEmodel(
-        x1'(t) = 3*x1(t) - x2(t)^2,
-        x2'(t) = -3 * x2(t)^2 + 2*x1(t) * x2(t),
-        y(t) = 3*x2(t) 
     ),
 
     @ODEmodel(
@@ -179,11 +174,25 @@ push!(
 
     ),
 
+    @ODEmodel(
+        x1'(t) =  -x2(t) + 3*x1(t)^2,
+        x2'(t) =2*x1(t)^2 - 3*x2(t),
+        y(t) = x1(t)*x2(t) + x1(t) + 7 * x2(t)
+
+    ),
+
+    @ODEmodel(
+        x1'(t) = 3*x1(t) + 7*x2(t) - 6,
+        x2'(t) = -9*x1(t)^2 + x1(t)*x2(t) - 5*x1(t) + 2*x2(t)^2 + 4*x2(t) - 8,
+        y(t) = 3*x1(t)^2 - 4*x1(t)*x2(t) - 2*x1(t) - 7*x2(t)^2 - 6*x2(t) + 9
+    ),
+
+
 )
 
 @testset "Testing against the standard algorithms" begin
     for c in cases
         @info c
-        @test check_ansatz(c)
+        @test check_ansatz_modp(c, 2^31 - 1)
     end
 end

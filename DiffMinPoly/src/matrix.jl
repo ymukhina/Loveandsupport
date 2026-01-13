@@ -14,13 +14,15 @@ function build_matrix(ode, n, dervs, minpoly_ord, support, n_rows; vanish_deg = 
 
     if vanish_deg == false
         points = generate_points_base(F, n_rows, n)
-    elseif (dervs[1] == ode.x_vars[1])
-        # @info "Special case"
+    elseif (is_linear(dervs[1]) == -1)
+         @info "Special case"
         points = generate_points_dual(F, n_rows, n, vanish_deg)
     else 
-        #  @info "Proletarian case"
+        @info dervs[1]
+         @info "Proletarian case"
         points = generate_points_dual_linear(F, n_rows, n, vanish_deg, dervs[1])
     end   
+
  
 
     R, ε = polynomial_ring(F, "ε")

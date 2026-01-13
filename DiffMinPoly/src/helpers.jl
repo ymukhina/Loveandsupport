@@ -9,30 +9,85 @@ returns the index of this variable or 0 otherwise.
 """
 
 function is_linear(f)
-
     n = nvars(parent(f))          
-    remaining = trues(n)          
-    check = zeros(Int, n)
-
-    for exps in collect(Oscar.exponents(f))
+    remaining = trues(n)  # Track which variables could be linear
+    check = zeros(Int, n)  # Track sum of exponents
+    coll_exp = collect(Oscar.exponents(f))
+    
+    # First pass: identify which variables appear with exponent > 1 in ANY term
+    for exps in coll_exp
         for i in 1:n
-            if remaining[i] && exps[i] > 1
-                remaining[i] = false
-            else 
-                remaining[i] = true
+            if exps[i] > 1
+                remaining[i] = false  # Variable i is NOT linear
+            end
+        end
+    end
+    
+    # Second pass: sum exponents for variables that could still be linear
+    for exps in coll_exp
+        for i in 1:n
+            if remaining[i]
                 check[i] += exps[i]
             end
         end
-        any(remaining) || return nothing
     end
-
+    
+    # Check if any variable is actually linear (appears in multiple terms with total exponent > 1)
+    # or if all variables have exponent > 1 when summed across all terms
+    if !any(remaining)
+        return 0  # No variable is linear
+    end
+    
+    # Find which variable is linear
     for i in 1:n
         if remaining[i] && check[i] > 0
-            return i 
+            if length(coll_exp) == 1
+                return -1 
+            else 
+                return i 
+            end
         end
     end
-
+    
     return 0
+end
+
+# function is_linear(f)
+
+#     n = nvars(parent(f))          
+#     remaining = trues(n)          
+#     check = zeros(Int, n)
+#     coll_exp = collect(Oscar.exponents(f))
+    
+#     for exps in coll_exp
+#         for i in 1:n
+#             if remaining[i] && exps[i] > 1
+#                 remaining[i] = false
+#             else 
+#                 remaining[i] = true
+#                 check[i] += exps[i]
+#             end
+#         end
+#         any(remaining) || return nothing
+#     end
+
+#     for i in 1:n
+#         if remaining[i] && check[i] > 0
+#             if (length(coll_exp) == 1)
+#                 return -1 
+#             else 
+#                 return i 
+#             end
+#         end
+#     end
+
+#     return 0
+
+# end
+
+function rational_parametrization(f)
+
+    return false
 
 end
 
@@ -89,30 +144,48 @@ function generate_points_dual(F, n_points, n_vars, set_x1 = 0)
 
 end
 
-function solve_linear_equation(F, n_vars, coeffs)
+# function solve_linear_equation(F, n_vars, coeffs)
 
-    sum_other = zero(F)
-    sol = [rand(F) for _ in 1:n_vars+1]
+#     sum_other = zero(F)
+#     sol = [rand(F) for _ in 1:n_vars+1]
 
-    i = findfirst(!iszero, coeffs)
+#     i = findfirst(!iszero, coeffs)
 
-    if i === nothing
-        error("All coefficients are zero, das ist not gut")
-        # @info "CATASTRIFY!!!!"
-    end
+#     if i === nothing
+#         error("All coefficients are zero, das ist not gut")
+#         # @info "CATASTRIFY!!!!"
+#     end
 
-        for j in 1:n_vars
-            if j != i
-                sol[j] = rand(F)
-                sum_other += qq_to_fp(F, coeffs[j]) * sol[j]
-            end
-        end
-        sum_other += qq_to_fp(F, coeffs[end])
-        sol[i] = -sum_other / qq_to_fp(F, coeffs[i])
+#         for j in 1:n_vars
+#             if j != i
+#                 sol[j] = rand(F)
+#                 sum_other += qq_to_fp(F, coeffs[j]) * sol[j]
+#             end
+#         end
+#         sum_other += qq_to_fp(F, coeffs[end])
+#         sol[i] = -sum_other / qq_to_fp(F, coeffs[i])
         
 
+#     return sol
+# end
+
+function solve_linear_equation(F, i::Int, n_vars, f)
+    p = F(0)
+    q = F(1)
+    sol = [rand(F) for _ in 1:n_vars+1]
+    
+    sol[i] = F(1)
+    q = f(sol...)  
+    
+    sol[i] = F(0)
+    p = f(sol...)  
+    
+    a = q - p
+    sol[i] = -p / a
+    
     return sol
 end
+
 
 function is_pole(F, r, a)
     den = denominator(r)
@@ -177,7 +250,7 @@ function generate_points_dual_linear(F, n_points, n_vars, dual_deg, y_poly)
     R, _ = polynomial_ring(F, "ε")
 
     units = unit_vectors(F, n_vars+1)
-
+    index = is_linear(y_poly)
 
     coeffs = [Oscar.coeff(y_poly, m) for m in units]
    
@@ -185,7 +258,7 @@ function generate_points_dual_linear(F, n_points, n_vars, dual_deg, y_poly)
         vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
 
         for i in 1:n_points
-            sol = solve_linear_equation(F, n_vars, coeffs) 
+            sol = solve_linear_equation(F, index, n_vars, y_poly) 
             vec_dual = Vector{DualNumber{fpFieldElem}}(undef, n_vars+1)
             for k in 1:n_vars+1
                 if !(coeffs[k] == 0)
@@ -202,7 +275,7 @@ function generate_points_dual_linear(F, n_points, n_vars, dual_deg, y_poly)
         vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
         
         for i in 1:n_points
-            vecs[i] = solve_linear_equation(F, n_vars, coeffs) 
+            vecs[i] = solve_linear_equation(F, index, n_vars, y_poly) 
         end
     end
 
