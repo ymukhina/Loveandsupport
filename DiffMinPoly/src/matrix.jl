@@ -1,7 +1,7 @@
 using Oscar 
 
 
-function build_matrix(ode, n, dervs, minpoly_ord, support, n_rows; vanish_deg = false, info = true)
+function build_matrix(F, ode, n, dervs, minpoly_ord, support, n_rows; vanish_deg = false, rational_param = nothing, info = true)
 
     var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1: (minpoly_ord + 1) ]
     F = base_ring(parent(dervs[end]))
@@ -14,13 +14,9 @@ function build_matrix(ode, n, dervs, minpoly_ord, support, n_rows; vanish_deg = 
 
     if vanish_deg == false
         points = generate_points_base(F, n_rows, n)
-    elseif (is_linear(dervs[1]) == -1)
-         @info "Special case"
-        points = generate_points_dual(F, n_rows, n, vanish_deg)
-    else 
-        @info dervs[1]
-         @info "Proletarian case"
-        points = generate_points_dual_linear(F, n_rows, n, vanish_deg, dervs[1])
+
+    else (!isempty(rational_param))
+        points = generate_points_rational_parametrization(F, n_rows, n, vanish_deg, rational_param)
     end   
 
  
@@ -190,7 +186,7 @@ function build_matrix(ode, n, dervs, minpoly_ord, support, n_rows; vanish_deg = 
 end
 
 
-function solve_matrix(ode, n, dervs, ord, possible_supp, ks, l; info=true)
+function solve_matrix(F, ode, n, dervs, ord, possible_supp, ks, l, rational_param; info=true)
     solve_ker = 0
     build_mat = 0
 
@@ -218,10 +214,10 @@ function solve_matrix(ode, n, dervs, ord, possible_supp, ks, l; info=true)
 # println("Row $i is $((n_rows/l)*100)% of Total Linear System")
         strt = time()
         if i > length(ks)                   # Allows to build only each block row one by one to not overload memory.
-            ls = build_matrix(ode, n, dervs, ord, supp, n_rows; info = true)
+            ls = build_matrix(F, ode, n, dervs, ord, supp, n_rows, rational_param = nothing; info = true)
            # (n, dervs, minpoly_ord, support, n_rows, vanish_deg = false, info = true)
         else
-            ls = build_matrix(ode, n, dervs, ord, supp, n_rows; vanish_deg = Int(i), info = info)
+            ls = build_matrix(F, ode, n, dervs, ord, supp, n_rows; vanish_deg = Int(i), rational_param, info = info)
             # All other block rows
         end 
 
@@ -254,7 +250,7 @@ function solve_matrix(ode, n, dervs, ord, possible_supp, ks, l; info=true)
     if dim > 1
         info && @info "Adding $(dim-1) rows to compensate for loss"
         strt = time()
-        E = build_matrix(ode, n, dervs, ord, possible_supp, dim - 1; vanish_deg = false, info = info)
+        E = build_matrix(F, ode, n, dervs, ord, possible_supp, dim - 1; vanish_deg = false, rational_param=nothing, info = info)
         t = time() - strt
         build_mat += t
         info && @info "Additional rows added in $(time() - strt)"

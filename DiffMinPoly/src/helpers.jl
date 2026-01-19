@@ -4,92 +4,24 @@ using StructuralIdentifiability
     is_linear(f)
 
 This function checks if a polinomial f linear w.r.t. one of its variables, 
-returns the index of this variable or 0 otherwise.
+returns the index of this variable or -1 otherwise.
 
 """
 
 function is_linear(f)
-    n = nvars(parent(f))          
-    remaining = trues(n)  # Track which variables could be linear
-    check = zeros(Int, n)  # Track sum of exponents
-    coll_exp = collect(Oscar.exponents(f))
     
-    # First pass: identify which variables appear with exponent > 1 in ANY term
-    for exps in coll_exp
-        for i in 1:n
-            if exps[i] > 1
-                remaining[i] = false  # Variable i is NOT linear
-            end
+    R = parent(f)
+    n = ngens(R)
+
+    for i in 1:n-1
+        if degree(f, i) == 1
+            return true, i
         end
     end
-    
-    # Second pass: sum exponents for variables that could still be linear
-    for exps in coll_exp
-        for i in 1:n
-            if remaining[i]
-                check[i] += exps[i]
-            end
-        end
-    end
-    
-    # Check if any variable is actually linear (appears in multiple terms with total exponent > 1)
-    # or if all variables have exponent > 1 when summed across all terms
-    if !any(remaining)
-        return 0  # No variable is linear
-    end
-    
-    # Find which variable is linear
-    for i in 1:n
-        if remaining[i] && check[i] > 0
-            if length(coll_exp) == 1
-                return -1 
-            else 
-                return i 
-            end
-        end
-    end
-    
-    return 0
+
+    return false, -1
 end
 
-# function is_linear(f)
-
-#     n = nvars(parent(f))          
-#     remaining = trues(n)          
-#     check = zeros(Int, n)
-#     coll_exp = collect(Oscar.exponents(f))
-    
-#     for exps in coll_exp
-#         for i in 1:n
-#             if remaining[i] && exps[i] > 1
-#                 remaining[i] = false
-#             else 
-#                 remaining[i] = true
-#                 check[i] += exps[i]
-#             end
-#         end
-#         any(remaining) || return nothing
-#     end
-
-#     for i in 1:n
-#         if remaining[i] && check[i] > 0
-#             if (length(coll_exp) == 1)
-#                 return -1 
-#             else 
-#                 return i 
-#             end
-#         end
-#     end
-
-#     return 0
-
-# end
-
-function rational_parametrization(f)
-
-    return false
-
-end
 
 """
     generate_points_base(F, n_points, n_vars, set_x1 = false)
@@ -108,88 +40,10 @@ function generate_points_base(F, n_points, n_vars)
     return vecs
 end
 
-"""
-    generate_points_dual(F, n_points, n_vars, set_x1 = false)
-
-This function generates n_points random interpolation dual number points in the field F and returns them as a vector of vectors.
-
-The set_x1 flag is used to set the first variable to a specific value, e.g. 0 or epsilon(1) for the dual number vanishing degree.
-
-"""
-
-function generate_points_dual(F, n_points, n_vars, set_x1 = 0)
-    R, _ = polynomial_ring(F, "ε")
-
-    if set_x1 > 1
-        vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
-    else
-        vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
-    end
-
-    for i in 1:n_points
-        if set_x1 > 1
-            vec = [Epsilon(Int(set_x1), F)]
-            
-            for _ in 1:n_vars
-                dual_poly = R(rand(F)) + rand(F) * Epsilon(Int(set_x1), F)
-                push!(vec, dual_poly)
-            end
-        else
-            vec = [rand(F) for _ in 1:n_vars + 1]
-            vec[1] = F(0)
-        end
-        vecs[i] = vec
-    end
-    return vecs
-
-end
-
-# function solve_linear_equation(F, n_vars, coeffs)
-
-#     sum_other = zero(F)
-#     sol = [rand(F) for _ in 1:n_vars+1]
-
-#     i = findfirst(!iszero, coeffs)
-
-#     if i === nothing
-#         error("All coefficients are zero, das ist not gut")
-#         # @info "CATASTRIFY!!!!"
-#     end
-
-#         for j in 1:n_vars
-#             if j != i
-#                 sol[j] = rand(F)
-#                 sum_other += qq_to_fp(F, coeffs[j]) * sol[j]
-#             end
-#         end
-#         sum_other += qq_to_fp(F, coeffs[end])
-#         sol[i] = -sum_other / qq_to_fp(F, coeffs[i])
-        
-
-#     return sol
-# end
-
-function solve_linear_equation(F, i::Int, n_vars, f)
-    p = F(0)
-    q = F(1)
-    sol = [rand(F) for _ in 1:n_vars+1]
-    
-    sol[i] = F(1)
-    q = f(sol...)  
-    
-    sol[i] = F(0)
-    p = f(sol...)  
-    
-    a = q - p
-    sol[i] = -p / a
-    
-    return sol
-end
-
 
 function is_pole(F, r, a)
     den = denominator(r)
-    return den(a) == F(0)
+    return den(a...) == F(0)
 end
 
 function has_denominator(r)
@@ -201,26 +55,23 @@ function has_denominator(r)
     end
 end
 
-"""
-    generate_points_rational_parametrization(F, n_points::Int, dual_deg, rp)
 
-For the rational parametrization rp = [rp[1](t), ... , rp[n](t)] generates n_points for t 
-and evaluates rp on the chosen t. Use dual_deg > 1 for the evaluation in dual numbers
-
-"""
-function generate_points_rational_parametrization(F, n_points::Int, dual_deg, rp)
-
-    R, _ = polynomial_ring(F, "ε")
+function generate_points_rational_parametrization(F, n_points::Int, n_vars::Int, dual_deg, rp = nothing)
     if dual_deg > 1
         vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
     else
         vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
     end
+
     
+    R = parent(rp[1])    
+    nv = ngens(R)
+
     i = 1
     while i <= n_points
-        t = rand(F)
-        @info t
+
+        t = [rand(F) for _ in 1:nv]
+
         bad = false
         for r in rp
             if has_denominator(r) && is_pole(F, r, t)
@@ -228,86 +79,59 @@ function generate_points_rational_parametrization(F, n_points::Int, dual_deg, rp
                 break
             end
         end
-        
-        if bad
-            continue  
-        end
-        
+        bad && continue   
+
+       
         if dual_deg > 1
-            vecs[i] = [r(t) + rand(F) * Epsilon(Int(dual_deg), F) for r in rp]
+            vecs[i] = Vector{DualNumber{fpFieldElem}}(undef, n_vars + 1)
         else
-            vecs[i] = [r(t) for r in rp]
+            vecs[i] = Vector{fpFieldElem}(undef, n_vars + 1)
         end
-        
-        i += 1  
-    end
     
+        for j in 1:n_vars
+            if dual_deg > 1
+                vecs[i][j] = rp[j](t...) + rand(F) * Epsilon(Int(dual_deg), F)
+            else
+                vecs[i][j] = rp[j](t...)
+            end
+        end
+
+        if dual_deg > 1
+            vecs[i][n_vars + 1] = rand(F) * Epsilon(Int(dual_deg), F)
+        else
+            vecs[i][n_vars + 1] = rand(F)
+        end
+
+        i += 1
+    end
+
     return vecs
 end
 
+function search_rational_parametrization(f, linear_index)
+    R = parent(f)
+    gens_list = gens(R)
+    n = length(gens_list)
+    xi = gens_list[linear_index]
+    rp = Vector{Any}(undef, n-1)  
 
-function generate_points_dual_linear(F, n_points, n_vars, dual_deg, y_poly)
-    R, _ = polynomial_ring(F, "ε")
+    a = derivative(f, xi)
+    b = f - xi*a
 
-    units = unit_vectors(F, n_vars+1)
-    index = is_linear(y_poly)
+    F = fraction_field(R)
+    xi_rp = -F(b) / F(a)
 
-    coeffs = [Oscar.coeff(y_poly, m) for m in units]
-   
-    if dual_deg > 1
-        vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
-
-        for i in 1:n_points
-            sol = solve_linear_equation(F, index, n_vars, y_poly) 
-            vec_dual = Vector{DualNumber{fpFieldElem}}(undef, n_vars+1)
-            for k in 1:n_vars+1
-                if !(coeffs[k] == 0)
-                    vec_dual[k] =  rand(F) * Epsilon(Int(dual_deg), F) + sol[k]
-                else
-                    vec_dual[k] =  DualNumber{fpFieldElem}(R(sol[k]), dual_deg)
-                end
-            end
-            vec_dual[n_vars+1] = DualNumber{fpFieldElem}(R(F(0)), dual_deg)
-            vecs[i] = vec_dual
-         end
-        
-    else
-        vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
-        
-        for i in 1:n_points
-            vecs[i] = solve_linear_equation(F, index, n_vars, y_poly) 
+    for i in 1:n-1
+        if i == linear_index
+            rp[i] = xi_rp
+        else
+            rp[i] = gens_list[i]
         end
     end
 
-return vecs
+    return rp
 end
 
-
-function unit_vectors(F, n)
-    units = Vector{Int}[]
-    
-    for i in 1:n
-        vec = [fp_to_int(F(0)) for _ in 1:n]
-        vec[i] = fp_to_int(F(1))
-        push!(units, vec)
-    end
-
-    push!(units, [fp_to_int(F(0)) for _ in 1:n])
-
-    return units
-end
-
-function fp_to_int(x)
-    return Int(x.data)
-end
-
-function qq_to_fp(F::fpField, x::QQFieldElem)
-    return F(numerator(x)) * inv(F(denominator(x)))
-end
-
-function qq_to_fp(F::fpField, x::fpFieldElem)
-    return x  # Already in the right field, just return it
-end
 
 
 """
@@ -368,6 +192,7 @@ function construct_result_polynomial(ode, ker, dim, possible_supp, ord, F; info=
     )
 
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
+
     
     g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
 

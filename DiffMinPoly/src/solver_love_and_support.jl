@@ -40,12 +40,13 @@ end
 
 
 """
-    eliminate_with_love_and_support_modp(ode, x, p, ord, possible_supp)
+    eliminate_with_love_and_support_modp(ode, x, p, rational_param, ord, possible_supp)
 
 Computes a polynomial of the order `ord` over a finite field F_p for the `x` variable of a polynomial ODE model `ode` (without inputs and parameters) with support `possible_supp`.
+If you know the rational parametrisation of the observation function, add it to rational_param
 
 """
-function eliminate_with_love_and_support_modp(ode::ODE, p::Int, ord::Int=minpoly_order(ode),
+function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=nothing, ord::Int=minpoly_order(ode),
     possible_supp::Vector{PointVector{ZZRingElem}}=f_min_support(ode, ord); 
     info = true)
         
@@ -63,35 +64,37 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, ord::Int=minpoly
     y_poly = R_new(y_poly)
 
     l = length(possible_supp)
-
-    # high_deg := maximal degree on y that the support has
+    
     high_deg = possible_supp[end][1]
-    # degree_y_poly = total_degree(y_poly)
 
-    if rational_parametrization(y_poly) == false
-        if is_linear(y_poly) == 0 && !(is_linear(y_poly) == -1)
-            @info "Carpe Diem"
-            @info "General case"
-            possible_supp = sort_gleb!(possible_supp)
-            dervs = lie_derivatives(y_poly, ode_mod_p, ord)
-            ker, dim = solve_matrix_general(F, ode, n, m, dervs, ord, possible_supp; info=true)
-            result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
-            return result, 0, 0
-        else
-            @info "Memento Mori"
-            @info "Linear case"
-            # possible_supp = sort_gleb_max!(possible_supp)
-            dervs = lie_derivatives(y_poly, ode_mod_p, ord)
-            splits = split_supp(possible_supp, high_deg)
-            ker, dim, build_mat, solve_ker = solve_matrix(ode, n, dervs, ord, possible_supp, splits, l; info=true) 
-    
-            info && @info "Matrix building took $build_mat"
-            info && @info "Kernel computation took $solve_ker"
-    
-            possible_supp = sort_gleb_max!(possible_supp)
-            result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
-            return result, build_mat, solve_ker
+    if rational_param === nothing
+        if is_linear(y_poly)[1] 
+            rational_param = search_rational_parametrization(y_poly, is_linear(y_poly)[2])
+        else 
+            rational_param = false
         end
+    end
+
+    if !(rational_param == false)
+    @info "Rational parametrization case"
+           possible_supp = sort_gleb_max!(possible_supp)
+           dervs = lie_derivatives(y_poly, ode_mod_p, ord)
+           splits = split_supp(possible_supp, high_deg)
+
+           ker, dim, build_mat, solve_ker = solve_matrix(F, ode, n, dervs, ord, possible_supp, splits, l, rational_param; info=true) 
+   
+           info && @info "Matrix building took $build_mat"
+           info && @info "Kernel computation took $solve_ker"
+   
+           result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
+           return result, build_mat, solve_ker
+    else 
+        @info "General case"
+                possible_supp = sort_gleb!(possible_supp)
+                dervs = lie_derivatives(y_poly, ode_mod_p, ord)
+                ker, dim = solve_matrix_general(F, ode, n, m, dervs, ord, possible_supp; info=true)
+                result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
+                return result, 0, 0
     end
 
 end

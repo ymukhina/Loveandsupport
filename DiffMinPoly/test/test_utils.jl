@@ -9,15 +9,15 @@ const Ptype = QQMPolyRingElem
 # -------- Test function -------- #
 
 # test ansatz against IO enemy equation 
-function check_ansatz_modp(ode::ODE, p::Int)
+function check_ansatz_modp(ode::ODE, p::Int, rational_param=nothing)
 
     ord = DiffMinPoly.minpoly_order(ode) 
     possible_supp = DiffMinPoly.f_min_support(ode, ord)
     
     @info "Solving with love and support!"
-    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, p, ord, possible_supp; info = true)[1]
+    tim = @elapsed io_tocheck = eliminate_with_love_and_support_modp(ode, p, rational_param, ord, possible_supp; info = true)[1]
     # io_tocheck *= Oscar.constant_coefficient(io_tocheck)^(-1)
-    # println("with love and support:", io_tocheck)
+    println("with love and support:", io_tocheck)
     @info "time: $(tim) seconds"
 
     @info "Solving without love and support :("
@@ -25,7 +25,7 @@ function check_ansatz_modp(ode::ODE, p::Int)
     io_correct = _reduce_mod_p(io_correct, p)
     io_correct *= Oscar.leading_coefficient(io_correct)^(-1)
     # io_correct *= Oscar.constant_coefficient(io_correct)^(-1)
-    # println("without love and support:", io_correct)
+    println("without love and support:", io_correct)
     @info "time: $(tim) seconds"
 
     R = parent(io_tocheck)
