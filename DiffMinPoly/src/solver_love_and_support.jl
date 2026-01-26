@@ -71,11 +71,11 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
         if is_linear(y_poly)[1] 
             rational_param = search_rational_parametrization(y_poly, is_linear(y_poly)[2])
         else 
-            rational_param = false
+            rational_param = nothing
         end
     end
 
-    if !(rational_param == false)
+    if !isnothing(rational_param)
     @info "Rational parametrization case"
            possible_supp = sort_gleb_max!(possible_supp)
            dervs = lie_derivatives(y_poly, ode_mod_p, ord)

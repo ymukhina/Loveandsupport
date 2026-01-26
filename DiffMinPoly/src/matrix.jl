@@ -16,7 +16,9 @@ function build_matrix(F, ode, n, dervs, minpoly_ord, support, n_rows; vanish_deg
         points = generate_points_base(F, n_rows, n)
 
     else (!isempty(rational_param))
+        @info "vanishing degree" vanish_deg
         points = generate_points_rational_parametrization(F, n_rows, n, vanish_deg, rational_param)
+        @info "points" points
     end   
 
  
@@ -122,7 +124,7 @@ function build_matrix(F, ode, n, dervs, minpoly_ord, support, n_rows; vanish_deg
         end
         # @info "Matrix before" M
         S = matrix_space(F, n_rows, lsup)
-        # @info "Matrix after" S(M)  
+        @info "Matrix after" S(M)  
         return S(M)
 
     else
@@ -215,9 +217,11 @@ function solve_matrix(F, ode, n, dervs, ord, possible_supp, ks, l, rational_para
         strt = time()
         if i > length(ks)                   # Allows to build only each block row one by one to not overload memory.
             ls = build_matrix(F, ode, n, dervs, ord, supp, n_rows, rational_param = nothing; info = true)
+            @info "Matrix1" ls
            # (n, dervs, minpoly_ord, support, n_rows, vanish_deg = false, info = true)
         else
             ls = build_matrix(F, ode, n, dervs, ord, supp, n_rows; vanish_deg = Int(i), rational_param, info = info)
+            @info "Matrix2" ls
             # All other block rows
         end 
 

@@ -108,6 +108,7 @@ function generate_points_rational_parametrization(F, n_points::Int, n_vars::Int,
     return vecs
 end
 
+
 function search_rational_parametrization(f, linear_index)
     R = parent(f)
     gens_list = gens(R)
