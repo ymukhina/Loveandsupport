@@ -49,6 +49,8 @@ If you know the rational parametrisation of the observation function, add it to 
 function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=nothing, ord::Int=minpoly_order(ode),
     possible_supp::Vector{PointVector{ZZRingElem}}=f_min_support(ode, ord); 
     info = true)
+
+    @info "Possible support" possible_supp
         
     @assert is_probable_prime(p) "This is not a prime number, Yulia!"  
 
@@ -80,6 +82,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
            possible_supp = sort_gleb_max!(possible_supp)
            dervs = lie_derivatives(y_poly, ode_mod_p, ord)
            splits = split_supp(possible_supp, high_deg)
+           @info "Spits" splits
 
            ker, dim, build_mat, solve_ker = solve_matrix(F, ode, n, dervs, ord, possible_supp, splits, l, rational_param; info=true) 
    

@@ -108,6 +108,45 @@ function generate_points_rational_parametrization(F, n_points::Int, n_vars::Int,
     return vecs
 end
 
+# for the rational parametrisation generates the points [sol_1 + ε * rand(F) + ε^2 * rand(F) + ... + ε^k * rand(F), ...]
+
+function generate_truncated_dual_points(F, k::Int, n_points::Int, n_vars::Int, rp = nothing)
+
+    vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
+    
+    R = parent(rp[1])    
+    nv = ngens(R)
+
+    i = 1
+    while i <= n_points
+
+        t = [rand(F) for _ in 1:nv]
+
+        bad = false
+        for r in rp
+            if has_denominator(r) && is_pole(F, r, t)
+                bad = true
+                break
+            end
+        end
+        bad && continue   
+
+        vecs[i] = Vector{DualNumber{fpFieldElem}}(undef, n_vars + 1)    
+    
+        for j in 1:n_vars
+            vecs[i][j] = rp[j](t...) + sum(rand(F) * Epsilon(Int(k+1), F)^i for i in 1:k)
+        end
+
+        vecs[i][n_vars + 1] = rand(F) * Epsilon(Int(k+1), F)
+
+        
+        i += 1
+    end
+
+    return vecs
+    
+end
+
 
 function search_rational_parametrization(f, linear_index)
     R = parent(f)
@@ -122,11 +161,13 @@ function search_rational_parametrization(f, linear_index)
     F = fraction_field(R)
     xi_rp = -F(b) / F(a)
 
+    gens_F = [F(g) for g in gens_list]
+
     for i in 1:n-1
         if i == linear_index
             rp[i] = xi_rp
         else
-            rp[i] = gens_list[i]
+            rp[i] = gens_F[i]
         end
     end
 
@@ -178,6 +219,8 @@ end
 
 
 function construct_result_polynomial(ode, ker, dim, possible_supp, ord, F; info=true)
+
+    @info "KERKERKER" ker
 
     start_constructing_time = time()
     y_var = only(ode.y_vars)
