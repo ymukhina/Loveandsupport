@@ -205,6 +205,21 @@ function split_supp(supp, n_splits)
     return ks
 end
 
+function split_index(support, hd)
+
+    splits = split_supp(support, hd)
+    pushfirst!(splits, 0)
+
+    delta = [splits[i] - splits[i-1] for i in 2:length(splits)]
+
+    popfirst!(splits)
+    push!(splits, splits[end] + 1)
+    push!(delta, 1)
+    
+    return delta, splits
+
+end
+
 function evaluate_polynomial(dervs, point, vanishing_deg)
    
     if (vanishing_deg < 2) || (vanishing_deg == false)

@@ -365,13 +365,14 @@ function build_matrix_tranc_tranc(F, ode, n, m, n_rows, dervs, minpoly_ord, supp
     # filling the columns corresponding to the derivatives
     for i in 1:n_rows
         M[i, 1] = 1
-
-        # high_deg = support[end][end]
-        # @info "HEY" high_deg
-        # splits = split_supp(support, high_deg)[1]
-        # k = length(splits)
-
-        vec = generate_truncated_dual_points(F, 2, 1, n + m, rational_param) 
+        
+        if i == n_rows
+            vec = [rand(F) for _ in 1:(n + m + 1)]
+            @info "Special" vec
+        else
+            vec = generate_truncated_dual_points(F, 7, 1, n + m, rational_param) 
+        end
+     
         @info vec
         
         evals = [derv(vec...) for derv in dervs]
@@ -435,44 +436,88 @@ function submatrix_dual_matrix(M, index, size_rows, size_col)
     for i in 1:size_rows, j in 1:size_col
         N[i, j] = F(0)
     end
- 
-    for i in 1:size_rows, j in 2:size_col
-        if index == 0
-            N[i,1] = F(M[1,1])
-        else
-            N[i,1] = F(0)
+
+    if index == -1
+        last_row = M[end, 1:size_col]
+        @info last_row
+        for i in 1:size_rows
+            for j in 1:size_col
+                N[i, j] = F(last_row[j]) 
+            end
         end
-        N[i, j] = F(coeff(M[i, j].poly, index))  
+    else
+        for i in 1:size_rows, j in 2:size_col
+            if index == 0
+                N[i,1] = F(M[1,1])
+            else
+                N[i,1] = F(0)
+            end
+            N[i, j] = F(coeff(M[i, j].poly, index))  
+        end
     end
 
     return matrix(F, N)
 end
 
 
+function generate_submatrix_subsequence(F, ode, n, m, dervs, minpoly_ord, support, rational_param; info = true)
+
+    support = sort_gleb_max!(support)
+    hd = support[end][1]
+    splits = split_index(support, hd)
+    n_rows = splits[1][1]
+
+    @info splits, n_rows
+
+    M = build_matrix_tranc_tranc(F, ode, n, m, n_rows + 1, dervs, minpoly_ord, support, rational_param; info = true)
+
+    @info splits[1]
+
+    N = []
+
+    for i in 1:length(splits[1]) - 1
+        push!(N, submatrix_dual_matrix(M, i-1, splits[1][i], splits[2][i]))
+        @info N[end]
+    end
+
+    end_ind = length(splits[1])
+    push!(N, submatrix_dual_matrix(M, -1, splits[1][end_ind], splits[2][end_ind]))
+
+    @info size(N)
+
+    return N
+
+end
+
 function constrained_kernel(Ms...)
 
-    K1 = kernel(Ms[1], side=:right)
+    K = kernel(Ms[1], side = :right)
 
-    v = K1[:, 1]
     for i in 2:length(Ms)
 
         N = Ms[i]
-
-        n_old = length(v)
-
-        # A (old_ker) = (0)
-        # B (new_ker) = (0)
+        n_old = nrows(K)
         A = sub(N, 1:nrows(N), 1:n_old)
         B = sub(N, 1:nrows(N), n_old+1:ncols(N))
 
-        rhs = -A * v
+        Mred = hcat(A * K, B)
 
-        y = solve(B, rhs)
+        L = kernel(Mred, side = :right)
 
-        v = vcat(v, y)
+        if ncols(L) == 0
+            return zero_matrix(base_ring(N), n_old + ncols(B), 0)
+        end
+        d = ncols(K)
+        nr = nrows(L)
+        nc = ncols(L)
+
+        Lc = sub(L, 1:d, 1:nc)
+        Ly = sub(L, d+1:nr, 1:nc)
+
+        K = vcat(K * Lc, Ly)
     end
 
-    return v
+    return K
 end
 
 

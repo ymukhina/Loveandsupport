@@ -213,6 +213,7 @@ push!(
         y(t) = x2(t) + x1(t) + 1
     ), # [t1, -t1 - 1]
 
+    #sample1
     @ODEmodel(
         x1'(t) = 3*x1(t) + 7*x2(t) - 6,
         x2'(t) = 9*x1(t) + 17*x2(t) - 16,
@@ -227,6 +228,7 @@ push!(
         y(t) = x1(t)^2 + x2(t)^2 - 1
     ), #[ (1 - t1^2) // (1 + t1^2), (2 * t1) // ( 1 + t1^2)]
 
+    #sample2
     @ODEmodel(
         x1'(t) = 3*x1(t) + 7*x2(t) - 6,
         x2'(t) = 9*x1(t) + 17*x2(t) - 16,
@@ -240,6 +242,7 @@ push!(
         y(t) = x1(t)*x3(t) + x1(t)*x2(t) + x1(t) + 7 
     ),
 
+    #sample3 we can compute the kernel with the new method
     @ODEmodel(
         x1'(t) = 3*x1(t) - x2(t),
         x2'(t) = -3 * x2(t) + 2*x1(t) * x2(t),
