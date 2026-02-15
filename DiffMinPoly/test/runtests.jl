@@ -59,6 +59,7 @@ push!(
         y(t) = x2(t) + x1(t)
     ),
 
+    #hmm
     @ODEmodel(
         x1'(t) = 3*x1(t) - x2(t)^2,
         x2'(t) = -3 * x2(t)^2 + 2*x1(t) * x2(t),
@@ -75,6 +76,12 @@ push!(
     @ODEmodel(
         x1'(t) = 3*x1(t) - x2(t)^3,
         x2'(t) = -3 * x2(t)^3 + 2*x1(t) * x2(t),
+        y(t) = 2*x2(t) + 5*x1(t) 
+    ),
+
+    @ODEmodel(
+        x1'(t) = 3*x1(t) - x2(t),
+        x2'(t) = -3 * x2(t) + 2*x1(t) * x2(t),
         y(t) = 2*x2(t) + 5*x1(t) 
     ),
 

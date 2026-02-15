@@ -79,18 +79,29 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
 
     if !isnothing(rational_param)
     @info "Rational parametrization case"
-           possible_supp = sort_gleb_max!(possible_supp)
+        # possible_supp = sort_gleb!(possible_supp)
+        # possible_supp = sort_gleb_max!(possible_supp)
            dervs = lie_derivatives(y_poly, ode_mod_p, ord)
            splits = split_supp(possible_supp, high_deg)
-           @info "Spits" splits
 
-           ker, dim, build_mat, solve_ker = solve_matrix(F, ode, n, dervs, ord, possible_supp, splits, l, rational_param; info=true) 
+         @info "new matrix method"
+           matrix_seq = generate_submatrix_subsequence(F, ode , n, m, dervs, ord, possible_supp, rational_param)
+
+           @info matrix_seq
+           ker = constrained_kernel(matrix_seq...)
+           dim = size(ker)[2]
+
+           @info "Dimention" dim
+
+        #   ker, dim, build_mat, solve_ker = solve_matrix(F, ode, n, dervs, ord, possible_supp, splits, l, rational_param; info=true) 
    
-           info && @info "Matrix building took $build_mat"
-           info && @info "Kernel computation took $solve_ker"
-   
-           result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
-           return result, build_mat, solve_ker
+        #    info && @info "Matrix building took $build_mat"
+        #    info && @info "Kernel computation took $solve_ker"
+        # @info "OUR KER" ker
+        # @info "Supp?" possible_supp
+        possible_supp = sort_gleb_max!(possible_supp)
+        result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
+        return result, 0, 0#, build_mat, solve_ker
     else 
         @info "General case"
                 possible_supp = sort_gleb!(possible_supp)

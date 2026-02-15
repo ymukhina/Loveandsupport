@@ -365,12 +365,12 @@ function build_matrix_tranc_tranc(F, ode, n, m, n_rows, dervs, minpoly_ord, supp
     # filling the columns corresponding to the derivatives
     for i in 1:n_rows
         M[i, 1] = 1
-        
+
         if i == n_rows
             vec = [rand(F) for _ in 1:(n + m + 1)]
             @info "Special" vec
         else
-            vec = generate_truncated_dual_points(F, 7, 1, n + m, rational_param) 
+            vec = generate_truncated_dual_points(F, 20, 1, n + m, rational_param) 
         end
      
         @info vec
@@ -467,11 +467,7 @@ function generate_submatrix_subsequence(F, ode, n, m, dervs, minpoly_ord, suppor
     splits = split_index(support, hd)
     n_rows = splits[1][1]
 
-    @info splits, n_rows
-
     M = build_matrix_tranc_tranc(F, ode, n, m, n_rows + 1, dervs, minpoly_ord, support, rational_param; info = true)
-
-    @info splits[1]
 
     N = []
 
@@ -489,35 +485,48 @@ function generate_submatrix_subsequence(F, ode, n, m, dervs, minpoly_ord, suppor
 
 end
 
-function constrained_kernel(Ms...)
 
-    K = kernel(Ms[1], side = :right)
 
-    for i in 2:length(Ms)
+function mini_ker(N, sp)
 
-        N = Ms[i]
-        n_old = nrows(K)
-        A = sub(N, 1:nrows(N), 1:n_old)
-        B = sub(N, 1:nrows(N), n_old+1:ncols(N))
+    F = base_ring(N)
+    n_old = nrows(sp)             
+    d = ncols(sp)                 
+    n_rows, n_tot = size(N)
 
-        Mred = hcat(A * K, B)
+    A = sub(N, 1:n_rows, 1:n_old)
+    B = sub(N, 1:n_rows, n_old+1:n_tot)
 
-        L = kernel(Mred, side = :right)
+    aug_cols = ncols(B) + d
+    S = matrix_space(F, n_rows, aug_cols)
+    aug = zero(S)
 
-        if ncols(L) == 0
-            return zero_matrix(base_ring(N), n_old + ncols(B), 0)
-        end
-        d = ncols(K)
-        nr = nrows(L)
-        nc = ncols(L)
+    aug[:, 1:ncols(B)] = B
+    aug[:, ncols(B)+1:end] = A * sp
 
-        Lc = sub(L, 1:d, 1:nc)
-        Ly = sub(L, d+1:nr, 1:nc)
+    v = kernel(aug, side = :right)
 
-        K = vcat(K * Lc, Ly)
+    if ncols(v) == 0
+        return zero_matrix(F, n_old + ncols(B), 0)
     end
 
-    return K
+    y_part = sub(v, 1:ncols(B), 1:ncols(v))
+    lambdas = sub(v, ncols(B)+1:nrows(v), 1:ncols(v))
+
+    x_part = sp * lambdas
+
+    return vcat(x_part, y_part)
+end
+
+function constrained_kernel(Ms...)
+    sp = kernel(Ms[1], side = :right)
+
+    for i in 2:length(Ms)  
+       
+        sp = mini_ker(Ms[i], sp)
+    end
+
+    return sp
 end
 
 
