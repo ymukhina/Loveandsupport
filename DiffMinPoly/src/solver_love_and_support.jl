@@ -50,6 +50,8 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
     possible_supp::Vector{PointVector{ZZRingElem}}=f_min_support(ode, ord); 
     info = true)
 
+    start = time()
+
     @info "Possible support" possible_supp
         
     @assert is_probable_prime(p) "This is not a prime number, Yulia!"  
@@ -79,29 +81,37 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
 
     if !isnothing(rational_param)
     @info "Rational parametrization case"
-        # possible_supp = sort_gleb!(possible_supp)
-        # possible_supp = sort_gleb_max!(possible_supp)
-           dervs = lie_derivatives(y_poly, ode_mod_p, ord)
-           splits = split_supp(possible_supp, high_deg)
+        
+        dervs = lie_derivatives(y_poly, ode_mod_p, ord)
+       
+        @info "new matrix method"
 
-         @info "new matrix method"
-           matrix_seq = generate_submatrix_subsequence(F, ode , n, m, dervs, ord, possible_supp, rational_param)
+        ################################
+        start1 = time()
+        matrix_seq = generate_submatrix_subsequence(F, ode , n, m, dervs, ord, possible_supp, rational_param)
+        build_mat = time() - start1
 
-           @info matrix_seq
-           ker = constrained_kernel(matrix_seq...)
-           dim = size(ker)[2]
+        start2 = time()
+        ker = constrained_kernel(matrix_seq...)
+        solve_ker = time() - start2
 
-           @info "Dimention" dim
+        dim = size(ker)[2]
 
-        #   ker, dim, build_mat, solve_ker = solve_matrix(F, ode, n, dervs, ord, possible_supp, splits, l, rational_param; info=true) 
-   
-        #    info && @info "Matrix building took $build_mat"
-        #    info && @info "Kernel computation took $solve_ker"
-        # @info "OUR KER" ker
-        # @info "Supp?" possible_supp
+        ########################################
+        # @info "Dimention" dim
+
+        #OLD code Max
+        #  splits = split_supp(possible_supp, high_deg)
+        #  ker, dim, build_mat, solve_ker = solve_matrix(F, ode, n, dervs, ord, possible_supp, splits, l, rational_param; info=true) 
+        #  info && @info "Matrix building took $build_mat"
+        #  info && @info "Kernel computation took $solve_ker"
+
+        ######################################## 
+        
         possible_supp = sort_gleb_max!(possible_supp)
         result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
-        return result, 0, 0#, build_mat, solve_ker
+        time_end = time() - start
+        return result, build_mat, solve_ker, time_end#, build_mat, solve_ker
     else 
         @info "General case"
                 possible_supp = sort_gleb!(possible_supp)
@@ -111,6 +121,42 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
                 return result, 0, 0
     end
 
+end
+
+
+function eliminate_with_love_and_support_modp_old(ode::ODE, p::Int, ord::Int=minpoly_order(ode),
+    possible_supp::Vector{PointVector{ZZRingElem}}=f_min_support(ode, ord); 
+    info = true)
+
+    start = time()
+
+    @info "Possible support" possible_supp
+        
+    @assert is_probable_prime(p) "This is not a prime number, Yulia!"  
+
+    #setup modular enviroment
+    ode_mod_p = StructuralIdentifiability.reduce_ode_mod_p(ode, p)
+    R_new = ode_mod_p.poly_ring
+    F = Nemo.Native.GF(p)  
+
+    n = length(ode_mod_p.x_vars)
+    m = length(ode.parameters)
+    
+    y_poly = first(values(ode.y_equations))
+    y_poly = R_new(y_poly)
+
+    @info "Durty old town"
+    possible_supp = sort_gleb!(possible_supp)
+    dervs = lie_derivatives(y_poly, ode_mod_p, ord)
+
+    start1 = time()
+    ker, dim = solve_matrix_general(F, ode, n, m, dervs, ord, possible_supp; info=true)
+    build_and_solve = time() - start1
+
+    result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
+    time_end = time() - start
+
+    return result, build_and_solve, time_end
 end
 
 

@@ -220,20 +220,6 @@ push!(
         y(t) = x2(t) + x1(t) + 1
     ), # [t1, -t1 - 1]
 
-    #sample1
-    @ODEmodel(
-        x1'(t) = 3*x1(t) + 7*x2(t) - 6,
-        x2'(t) = 9*x1(t) + 17*x2(t) - 16,
-        y(t) = x1(t)^2 + x1(t)^3 - x2(t)^2
-    ), # [t1^2 - 1, t1 * (t1^2 - 1)]
-
-
-
-    @ODEmodel(
-        x1'(t) = 3*x1(t) + 7*x2(t) - 6,
-        x2'(t) = 9*x1(t) + 17*x2(t) - 16,
-        y(t) = x1(t)^2 + x2(t)^2 - 1
-    ), #[ (1 - t1^2) // (1 + t1^2), (2 * t1) // ( 1 + t1^2)]
 
     #sample2
     @ODEmodel(
@@ -263,4 +249,32 @@ push!(
         @info c
         @test check_ansatz_modp(c, 2^31 - 1)
     end
+
+    #tests for spesial cases of rational parametrisation
+    shafarevich = @ODEmodel(
+        x1'(t) = 3*x1(t) + 7*x2(t) - 6,
+        x2'(t) = 9*x1(t) + 17*x2(t) - 16,
+        y(t) = x1(t)^2 + x1(t)^3 - x2(t)^2
+    ) 
+
+    F = Nemo.Native.GF(2^31 - 1)  
+    R, t1 = polynomial_ring(F, "t1")
+    rp_shafarevich = [t1^2 - 1, t1 * (t1^2 - 1)]
+
+    @info shafarevich
+    @test check_ansatz_modp(shafarevich, 2^31 - 1, rp_shafarevich)
+
+    circle = @ODEmodel(
+        x1'(t) = 3*x1(t) + 7*x2(t) - 6,
+        x2'(t) = 9*x1(t) + 17*x2(t) - 16,
+        y(t) = x1(t)^2 + x2(t)^2 - 1
+    )
+    
+    F = Nemo.Native.GF(2^31 - 1)  
+    R, (t1, t2) = polynomial_ring(F, ["t1", "t2"])
+    rp_circle = [ (1 - t1^2) // (1 + t1^2), (2 * t1) // ( 1 + t1^2)]
+
+    @info circle
+    @test check_ansatz_modp(circle, 2^31 - 1, rp_circle)
+
 end

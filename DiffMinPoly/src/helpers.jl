@@ -134,7 +134,7 @@ function generate_truncated_dual_points(F, k::Int, n_points::Int, n_vars::Int, r
         vecs[i] = Vector{DualNumber{fpFieldElem}}(undef, n_vars + 1)    
     
         for j in 1:n_vars
-            vecs[i][j] = rp[j](t...) + sum(rand(F) * Epsilon(Int(k+1), F)^i for i in 1:k)
+            vecs[i][j] = rp[j](t...) + sum(rand(F) * Epsilon(Int(k+1), F)^i for i in 1:k+1)
         end
 
         vecs[i][n_vars + 1] = rand(F) * Epsilon(Int(k+1), F)
@@ -235,7 +235,7 @@ end
 
 function construct_result_polynomial(ode, ker, dim, possible_supp, ord, F; info=true)
 
-    @info "KERKERKER" ker
+    # @info "KERKERKER" ker
 
     start_constructing_time = time()
     y_var = only(ode.y_vars)
