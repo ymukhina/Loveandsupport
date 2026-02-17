@@ -1,30 +1,49 @@
 using Oscar 
 
-
 ############################################################################
-# code for the general case
+# updated code for rational parametrisation
 ############################################################################
 
-#build_matrix(ode, n, dervs, minpoly_ord, support, n_rows; vanish_deg = false, info = true)
-function build_matrix_general(F, ode, n, m, dervs, minpoly_ord, support; info = true)
+const MatrixElement = Union{fpFieldElem, DualNumber{fpFieldElem}}
+
+function build_smart_matrix_truncated(F, ode, n, m, split_array::Vector{Int}, dervs, minpoly_ord, support, rational_param; info = true)
     var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1:(minpoly_ord + m + 1) ]                                           
+
+    support = sort_gleb!(support)
+    old_support = support
+    new_support = copy(support)
+    sort_gleb_max!(new_support)
 
     support = [Vector{Int64}(p) for p in support]
 
-    @info "Support" support
-    
-    lsup = length(support)                                                    
-    S = matrix_space(F, lsup, lsup)
-    M = zero(S)
+    lsup = length(support)  
+    n_rows = sum(split_array) + 1
+
+    max_k_degree = length(split_array)
+
+    T = MatrixElement
+    M = Matrix{T}(undef, n_rows, lsup)
+    zero_val = F(0) 
+    for i in 1:n_rows, j in 1:lsup
+        M[i, j] = zero_val
+    end
+
     supp_to_index = Dict(s => i for (i, s) in enumerate(support))
 
+    cum_split = cumsum(split_array)
+
     # filling the columns corresponding to the derivatives
-    for i in 1:lsup
-        M[i, 1] = 1
-        vec = [rand(F) for _ in 1:(n + m + 1)] 
-        # @info "VEC" vec
+    for i in 1:sum(split_array)+1
+        M[i, 1] = F(1)
+        block = findfirst(x -> i <= x, cum_split) 
+
+        if i == n_rows
+            vec = [rand(F) for _ in 1:(n + m + 1)]
+        else
+            vec = generate_truncated_dual_points(F, max_k_degree - block, 1, n + m, rational_param) 
+        end
+     
         evals = [derv(vec...) for derv in dervs]
-        # @info "EVALS" evals
                
         for j in 1:(minpoly_ord + m + 1)
             supp = var_to_sup(j)
@@ -53,7 +72,7 @@ function build_matrix_general(F, ode, n, m, dervs, minpoly_ord, support; info = 
         
         supp_div_ind = supp_to_index[supp_divisor]
         mult_ind = get(supp_to_index, multiplier, -1)
-        for j in 1:lsup
+        for j in 1:n_rows
             if mult_ind == -1
                 multiplier_eval = prod(M[j, 2:(minpoly_ord + m + 2)] .^ multiplier)
             else
@@ -62,34 +81,122 @@ function build_matrix_general(F, ode, n, m, dervs, minpoly_ord, support; info = 
             M[j, i] = M[j, supp_div_ind] * multiplier_eval           
         end
     end
+
+    old_index = Dict(s => i for (i, s) in enumerate(old_support))
+    perm = [old_index[s] for s in new_support]
+
+    M = M[:, perm]
+
     return M
 end
 
 
-function solve_matrix_general(F, ode, n, m, dervs, ord::Int, possible_supp; info=true)
+function submatrix_dual_matrix(M, index, size_rows, size_col)
+    F = base_ring(M[1,2].poly)
 
-    info && @info "The size of the estimates support is $(length(possible_supp))"
+    N = Matrix{fpFieldElem}(undef, size_rows, size_col)
+    fill!(N, F(0))
 
-    tim2 = @elapsed ls = build_matrix_general(F, ode, n, m, dervs, ord, possible_supp; info = true)
-                                                                    
-    info && @info "eval method $(tim2)"
+    if index == -1
+        last_row = M[end, 1:size_col]
+        for i in 1:size_rows
+            for j in 1:size_col
+                N[i, j] = F(last_row[j]) 
+            end
+        end
+    else
+        for i in 1:size_rows, j in 2:size_col
+            if index == 0
+                N[i,1] = F(M[1,1])
+            else
+                N[i,1] = F(0)
+            end
+            N[i, j] = F(coeff(M[i, j].poly, index))  
+        end
+    end
 
-    info && @info "linear system dims $(size(ls))"
-    
-    system_soltime = @elapsed ker = kernel(ls, side=:right)
-    info && @info "Linear system solved in $system_soltime"
-
-    dim = size(ker)[2]
-    info && @info "The dimension of the solution space is $(dim)"
-
-    return ker, dim
+    return matrix(F, N)
 end
 
 
-############################################################################
-# updated code for rational parametrisation
-############################################################################
+function generate_submatrix_subsequence(F, ode, n, m, dervs, minpoly_ord, support, rational_param; info = true)
 
+    support = sort_gleb_max!(support)
+    hd = support[end][1]
+    splits = split_index(support, hd)
+    
+    ############################
+    # fill the matrix with trancated epsilon ps
+    #@info "old way"
+    # n_rows = splits[1][1]
+    # k = length(splits[2]) - 2
+    # M = build_matrix_truncated(F, ode, n, m, n_rows + 1, k, dervs, minpoly_ord, support, rational_param; info = true)
+    # ###########################
+
+    ############################
+    # fill the matrix with trancated epsilon ps
+    @info "new way"
+    M = build_smart_matrix_truncated(F, ode, n, m, splits[3], dervs, minpoly_ord, support, rational_param; info = true)
+    ############################
+
+    N = Vector{fpMatrix}(undef, length(splits[1]))
+
+    for i in 1:(length(splits[1]) - 1)
+        N[i] = submatrix_dual_matrix(M, i-1, splits[1][i], splits[2][i])
+    end
+    
+    end_ind = length(splits[1])
+    N[end_ind] = submatrix_dual_matrix(M, -1, splits[1][end_ind], splits[2][end_ind])
+    
+
+    return N
+
+end
+
+function mini_ker(N, sp)
+
+    F = base_ring(N)
+    n_old = nrows(sp)             
+    d = ncols(sp)                 
+    n_rows, n_tot = size(N)
+
+    A = sub(N, 1:n_rows, 1:n_old)
+    B = sub(N, 1:n_rows, n_old+1:n_tot)
+
+    aug_cols = ncols(B) + d
+    S = matrix_space(F, n_rows, aug_cols)
+    aug = zero(S)
+
+    aug[:, 1:ncols(B)] = B
+    aug[:, ncols(B)+1:end] = A * sp
+
+    v = kernel(aug, side = :right)
+
+    if ncols(v) == 0
+        return zero_matrix(F, n_old + ncols(B), 0)
+    end
+
+    y_part = sub(v, 1:ncols(B), 1:ncols(v))
+    lambdas = sub(v, ncols(B)+1:nrows(v), 1:ncols(v))
+
+    x_part = sp * lambdas
+
+    return vcat(x_part, y_part)
+end
+
+function constrained_kernel(Ms...)
+    sp = kernel(Ms[1], side = :right)
+
+    for i in 2:length(Ms)  
+       
+        sp = mini_ker(Ms[i], sp)
+    end
+
+    return sp
+end
+
+
+#------- WE DO NO USE THIS FUNCTION NOW, To fill all the matrix with truncated epsilon---------------------#
 function build_matrix_truncated(F, ode, n, m, n_rows, k, dervs, minpoly_ord, support, rational_param; info = true)
     var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1:(minpoly_ord + m + 1) ]                                           
 
@@ -167,42 +274,30 @@ function build_matrix_truncated(F, ode, n, m, n_rows, k, dervs, minpoly_ord, sup
     return M
 end
 
-function build_smart_matrix_truncated(F, ode, n, m, split_array::Vector{Int}, dervs, minpoly_ord, support, rational_param; info = true)
-    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1:(minpoly_ord + m + 1) ]                                           
+############################################################################
+# code for the general case
+############################################################################
 
-    support = sort_gleb!(support)
-    old_support = support
-    new_support = copy(support)
-    sort_gleb_max!(new_support)
+#build_matrix(ode, n, dervs, minpoly_ord, support, n_rows; vanish_deg = false, info = true)
+function build_matrix_general(F, ode, n, m, dervs, minpoly_ord, support; info = true)
+    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1:(minpoly_ord + m + 1) ]                                           
 
     support = [Vector{Int64}(p) for p in support]
 
-    lsup = length(support)  
-    n_rows = sum(split_array) + 1
-
-    max_k_degree = length(split_array)
-
-    M = Array{Any}(undef, n_rows, lsup)
-    for i in 1:n_rows, j in 1:lsup
-        M[i, j] = 0
-    end
-
+    # @info "Support" support
+    
+    lsup = length(support)                                                    
+    S = matrix_space(F, lsup, lsup)
+    M = zero(S)
     supp_to_index = Dict(s => i for (i, s) in enumerate(support))
 
-    cum_split = cumsum(split_array)
-
     # filling the columns corresponding to the derivatives
-    for i in 1:sum(split_array)+1
+    for i in 1:lsup
         M[i, 1] = 1
-        block = findfirst(x -> i <= x, cum_split) 
-
-        if i == n_rows
-            vec = [rand(F) for _ in 1:(n + m + 1)]
-        else
-            vec = generate_truncated_dual_points(F, max_k_degree - block, 1, n + m, rational_param) 
-        end
-     
+        vec = [rand(F) for _ in 1:(n + m + 1)] 
+        # @info "VEC" vec
         evals = [derv(vec...) for derv in dervs]
+        # @info "EVALS" evals
                
         for j in 1:(minpoly_ord + m + 1)
             supp = var_to_sup(j)
@@ -231,7 +326,7 @@ function build_smart_matrix_truncated(F, ode, n, m, split_array::Vector{Int}, de
         
         supp_div_ind = supp_to_index[supp_divisor]
         mult_ind = get(supp_to_index, multiplier, -1)
-        for j in 1:n_rows
+        for j in 1:lsup
             if mult_ind == -1
                 multiplier_eval = prod(M[j, 2:(minpoly_ord + m + 2)] .^ multiplier)
             else
@@ -240,120 +335,27 @@ function build_smart_matrix_truncated(F, ode, n, m, split_array::Vector{Int}, de
             M[j, i] = M[j, supp_div_ind] * multiplier_eval           
         end
     end
-
-    old_index = Dict(s => i for (i, s) in enumerate(old_support))
-    perm = [old_index[s] for s in new_support]
-
-    M = M[:, perm]
-
     return M
 end
 
 
-function submatrix_dual_matrix(M, index, size_rows, size_col)
-    F = base_ring(M[1,2].poly)
+function solve_matrix_general(F, ode, n, m, dervs, ord::Int, possible_supp; info=true)
 
-    N = Array{typeof(F(0))}(undef, size_rows, size_col)
-    for i in 1:size_rows, j in 1:size_col
-        N[i, j] = F(0)
-    end
+    info && @info "The size of the estimates support is $(length(possible_supp))"
 
-    if index == -1
-        last_row = M[end, 1:size_col]
-        for i in 1:size_rows
-            for j in 1:size_col
-                N[i, j] = F(last_row[j]) 
-            end
-        end
-    else
-        for i in 1:size_rows, j in 2:size_col
-            if index == 0
-                N[i,1] = F(M[1,1])
-            else
-                N[i,1] = F(0)
-            end
-            N[i, j] = F(coeff(M[i, j].poly, index))  
-        end
-    end
+    tim2 = @elapsed ls = build_matrix_general(F, ode, n, m, dervs, ord, possible_supp; info = true)
+                                                                    
+    info && @info "eval method $(tim2)"
 
-    return matrix(F, N)
-end
+    info && @info "linear system dims $(size(ls))"
+    
+    system_soltime = @elapsed ker = kernel(ls, side=:right)
+    info && @info "Linear system solved in $system_soltime"
 
+    dim = size(ker)[2]
+    info && @info "The dimension of the solution space is $(dim)"
 
-function generate_submatrix_subsequence(F, ode, n, m, dervs, minpoly_ord, support, rational_param; info = true)
-
-    support = sort_gleb_max!(support)
-    hd = support[end][1]
-    splits = split_index(support, hd)
-    n_rows = splits[1][1]
-
-    k = length(splits[2]) - 2
-
-    ############################
-    # fill the matrix with trancated epsilon ps
-    #@info "old way"
-    # M = build_matrix_truncated(F, ode, n, m, n_rows + 1, k, dervs, minpoly_ord, support, rational_param; info = true)
-    # ###########################
-
-    ############################
-    # fill the matrix with trancated epsilon ps
-    @info "new way"
-    M = build_smart_matrix_truncated(F, ode, n, m, splits[3], dervs, minpoly_ord, support, rational_param; info = true)
-    ############################
-
-    N = []
-
-    for i in 1:length(splits[1]) - 1
-        push!(N, submatrix_dual_matrix(M, i-1, splits[1][i], splits[2][i]))
-    end
-
-    end_ind = length(splits[1])
-    push!(N, submatrix_dual_matrix(M, -1, splits[1][end_ind], splits[2][end_ind]))
-
-    return N
-
-end
-
-function mini_ker(N, sp)
-
-    F = base_ring(N)
-    n_old = nrows(sp)             
-    d = ncols(sp)                 
-    n_rows, n_tot = size(N)
-
-    A = sub(N, 1:n_rows, 1:n_old)
-    B = sub(N, 1:n_rows, n_old+1:n_tot)
-
-    aug_cols = ncols(B) + d
-    S = matrix_space(F, n_rows, aug_cols)
-    aug = zero(S)
-
-    aug[:, 1:ncols(B)] = B
-    aug[:, ncols(B)+1:end] = A * sp
-
-    v = kernel(aug, side = :right)
-
-    if ncols(v) == 0
-        return zero_matrix(F, n_old + ncols(B), 0)
-    end
-
-    y_part = sub(v, 1:ncols(B), 1:ncols(v))
-    lambdas = sub(v, ncols(B)+1:nrows(v), 1:ncols(v))
-
-    x_part = sp * lambdas
-
-    return vcat(x_part, y_part)
-end
-
-function constrained_kernel(Ms...)
-    sp = kernel(Ms[1], side = :right)
-
-    for i in 2:length(Ms)  
-       
-        sp = mini_ker(Ms[i], sp)
-    end
-
-    return sp
+    return ker, dim
 end
 
 

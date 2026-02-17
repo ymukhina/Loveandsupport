@@ -52,7 +52,6 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
 
     start = time()
 
-    @info "Good morning Yulia" 
     @info "Possible support" possible_supp
         
     @assert is_probable_prime(p) "This is not a prime number, Yulia!"  
@@ -114,14 +113,14 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
         result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
         
         time_end = time() - start
-        return build_mat, solve_ker, time_end
+        return result, build_mat, solve_ker, time_end
     else 
         @info "General case"
-                possible_supp = sort_gleb!(possible_supp)
-                dervs = lie_derivatives(y_poly, ode_mod_p, ord)
-                ker, dim = solve_matrix_general(F, ode, n, m, dervs, ord, possible_supp; info=true)
-                result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
-                return result, 0, 0
+        possible_supp = sort_gleb!(possible_supp)
+        dervs = lie_derivatives(y_poly, ode_mod_p, ord)
+        ker, dim = solve_matrix_general(F, ode, n, m, dervs, ord, possible_supp; info=true)
+        result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
+        return result, 0, 0
     end
 
 end
@@ -159,7 +158,7 @@ function eliminate_with_love_and_support_modp_old(ode::ODE, p::Int, ord::Int=min
     result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
     time_end = time() - start
 
-    return build_and_solve, time_end
+    return result, build_and_solve, time_end
 end
 
 

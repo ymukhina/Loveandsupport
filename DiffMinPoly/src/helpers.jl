@@ -1,5 +1,9 @@
 using StructuralIdentifiability
 
+##################################
+# functions for the "smart" matrix 
+##################################
+
 """
     is_linear(f)
 
@@ -22,25 +26,6 @@ function is_linear(f)
     return false, -1
 end
 
-
-"""
-    generate_points_base(F, n_points, n_vars, set_x1 = false)
-
-This function generates n_points random interpolation points in the field F and returns them as a vector of vectors.
-
-"""
-
-function generate_points_base(F, n_points, n_vars)
-    vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
-
-    for i in 1:n_points
-        vec = [rand(F) for _ in 1:n_vars + 1]
-        vecs[i] = vec
-    end
-    return vecs
-end
-
-
 function is_pole(F, r, a)
     den = denominator(r)
     return den(a...) == F(0)
@@ -56,60 +41,7 @@ function has_denominator(r)
 end
 
 
-function generate_points_rational_parametrization(F, n_points::Int, n_vars::Int, dual_deg, rp = nothing)
-    if dual_deg > 1
-        vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
-    else
-        vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
-    end
-
-    
-    R = parent(rp[1])    
-    nv = ngens(R)
-
-    i = 1
-    while i <= n_points
-
-        t = [rand(F) for _ in 1:nv]
-
-        bad = false
-        for r in rp
-            if has_denominator(r) && is_pole(F, r, t)
-                bad = true
-                break
-            end
-        end
-        bad && continue   
-
-       
-        if dual_deg > 1
-            vecs[i] = Vector{DualNumber{fpFieldElem}}(undef, n_vars + 1)
-        else
-            vecs[i] = Vector{fpFieldElem}(undef, n_vars + 1)
-        end
-    
-        for j in 1:n_vars
-            if dual_deg > 1
-                vecs[i][j] = rp[j](t...) + rand(F) * Epsilon(Int(dual_deg), F)
-            else
-                vecs[i][j] = rp[j](t...)
-            end
-        end
-
-        if dual_deg > 1
-            vecs[i][n_vars + 1] = rand(F) * Epsilon(Int(dual_deg), F)
-        else
-            vecs[i][n_vars + 1] = rand(F)
-        end
-
-        i += 1
-    end
-
-    return vecs
-end
-
 # for the rational parametrisation generates the points [sol_1 + ε * rand(F) + ε^2 * rand(F) + ... + ε^k * rand(F), ...]
-
 function generate_truncated_dual_points(F, k::Int, n_points::Int, n_vars::Int, rp = nothing)
 
     vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
@@ -138,15 +70,13 @@ function generate_truncated_dual_points(F, k::Int, n_points::Int, n_vars::Int, r
         end
 
         vecs[i][n_vars + 1] = rand(F) * Epsilon(Int(k+1), F)
-
-        
+  
         i += 1
     end
 
     return vecs
     
 end
-
 
 function search_rational_parametrization(f, linear_index)
     R = parent(f)
@@ -224,22 +154,8 @@ function split_index(support, hd)
 
 end
 
-function evaluate_polynomial(dervs, point, vanishing_deg)
-   
-    if (vanishing_deg < 2) || (vanishing_deg == false)
-        eval = [derv(point...) for derv in dervs]
-    else   
-        eval = [derv(point) for derv in dervs]
-    end
-    
-
-    return eval
-end
-
 
 function construct_result_polynomial(ode, ker, dim, possible_supp, ord, F; info=true)
-
-    # @info "KERKERKER" ker
 
     start_constructing_time = time()
     y_var = only(ode.y_vars)
@@ -262,6 +178,98 @@ function construct_result_polynomial(ode, ker, dim, possible_supp, ord, F; info=
     info && @info "The resulting polynomial computes in $(time() - start_constructing_time)"
 
     return g * (1 // Oscar.leading_coefficient(g))
+end
+
+
+
+
+################################################
+# functions for our old retional parametrisation
+################################################
+
+function generate_points_rational_parametrization(F, n_points::Int, n_vars::Int, dual_deg, rp = nothing)
+    if dual_deg > 1
+        vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
+    else
+        vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
+    end
+
+    
+    R = parent(rp[1])    
+    nv = ngens(R)
+
+    i = 1
+    while i <= n_points
+
+        t = [rand(F) for _ in 1:nv]
+
+        bad = false
+        for r in rp
+            if has_denominator(r) && is_pole(F, r, t)
+                bad = true
+                break
+            end
+        end
+        bad && continue   
+
+       
+        if dual_deg > 1
+            vecs[i] = Vector{DualNumber{fpFieldElem}}(undef, n_vars + 1)
+        else
+            vecs[i] = Vector{fpFieldElem}(undef, n_vars + 1)
+        end
+    
+        for j in 1:n_vars
+            if dual_deg > 1
+                vecs[i][j] = rp[j](t...) + rand(F) * Epsilon(Int(dual_deg), F)
+            else
+                vecs[i][j] = rp[j](t...)
+            end
+        end
+
+        if dual_deg > 1
+            vecs[i][n_vars + 1] = rand(F) * Epsilon(Int(dual_deg), F)
+        else
+            vecs[i][n_vars + 1] = rand(F)
+        end
+
+        i += 1
+    end
+
+    return vecs
+end
+
+###############################################
+# functions for max code
+###############################################
+"""
+    generate_points_base(F, n_points, n_vars, set_x1 = false)
+
+This function generates n_points random interpolation points in the field F and returns them as a vector of vectors.
+
+"""
+
+
+function generate_points_base(F, n_points, n_vars)
+    vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
+
+    for i in 1:n_points
+        vec = [rand(F) for _ in 1:n_vars + 1]
+        vecs[i] = vec
+    end
+    return vecs
+end
+
+function evaluate_polynomial(dervs, point, vanishing_deg)
+   
+    if (vanishing_deg < 2) || (vanishing_deg == false)
+        eval = [derv(point...) for derv in dervs]
+    else   
+        eval = [derv(point) for derv in dervs]
+    end
+    
+
+    return eval
 end
 
 
