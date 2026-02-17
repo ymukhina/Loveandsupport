@@ -52,6 +52,7 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
 
     start = time()
 
+    @info "Good morning Yulia" 
     @info "Possible support" possible_supp
         
     @assert is_probable_prime(p) "This is not a prime number, Yulia!"  
@@ -64,16 +65,15 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
     n = length(ode_mod_p.x_vars)
     m = length(ode.parameters)
     
-    y_poly = first(values(ode.y_equations))
-    y_poly = R_new(y_poly)
-
-    l = length(possible_supp)
+    y_poly = R_new(first(values(ode.y_equations)))
     
-    high_deg = possible_supp[end][1]
+    # y_poly = first(values(ode.y_equations))
+    # y_poly = R_new(y_poly)
 
     if rational_param === nothing
-        if is_linear(y_poly)[1] 
-            rational_param = search_rational_parametrization(y_poly, is_linear(y_poly)[2])
+        is_lin, lin_idx = is_linear(y_poly)
+        if is_lin
+            rational_param = search_rational_parametrization(y_poly, lin_idx)
         else 
             rational_param = nothing
         end
@@ -101,6 +101,8 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
         # @info "Dimention" dim
 
         #OLD code Max
+        #l = length(possible_supp)
+        #high_deg = possible_supp[end][1]
         #  splits = split_supp(possible_supp, high_deg)
         #  ker, dim, build_mat, solve_ker = solve_matrix(F, ode, n, dervs, ord, possible_supp, splits, l, rational_param; info=true) 
         #  info && @info "Matrix building took $build_mat"
@@ -110,8 +112,9 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
         
         possible_supp = sort_gleb_max!(possible_supp)
         result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
+        
         time_end = time() - start
-        return result, build_mat, solve_ker, time_end#, build_mat, solve_ker
+        return build_mat, solve_ker, time_end
     else 
         @info "General case"
                 possible_supp = sort_gleb!(possible_supp)
@@ -156,7 +159,7 @@ function eliminate_with_love_and_support_modp_old(ode::ODE, p::Int, ord::Int=min
     result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
     time_end = time() - start
 
-    return result, build_and_solve, time_end
+    return build_and_solve, time_end
 end
 
 

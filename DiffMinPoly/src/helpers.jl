@@ -214,9 +214,13 @@ function split_index(support, hd)
 
     popfirst!(splits)
     push!(splits, splits[end] + 1)
+
+    smart_split = [delta[i] - delta[i+1] for i in length(delta)-1:-1:1]
+    pushfirst!(smart_split, delta[end])
+
     push!(delta, 1)
     
-    return delta, splits
+    return delta, splits, smart_split
 
 end
 

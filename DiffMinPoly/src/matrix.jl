@@ -167,6 +167,88 @@ function build_matrix_truncated(F, ode, n, m, n_rows, k, dervs, minpoly_ord, sup
     return M
 end
 
+function build_smart_matrix_truncated(F, ode, n, m, split_array::Vector{Int}, dervs, minpoly_ord, support, rational_param; info = true)
+    var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1:(minpoly_ord + m + 1) ]                                           
+
+    support = sort_gleb!(support)
+    old_support = support
+    new_support = copy(support)
+    sort_gleb_max!(new_support)
+
+    support = [Vector{Int64}(p) for p in support]
+
+    lsup = length(support)  
+    n_rows = sum(split_array) + 1
+
+    max_k_degree = length(split_array)
+
+    M = Array{Any}(undef, n_rows, lsup)
+    for i in 1:n_rows, j in 1:lsup
+        M[i, j] = 0
+    end
+
+    supp_to_index = Dict(s => i for (i, s) in enumerate(support))
+
+    cum_split = cumsum(split_array)
+
+    # filling the columns corresponding to the derivatives
+    for i in 1:sum(split_array)+1
+        M[i, 1] = 1
+        block = findfirst(x -> i <= x, cum_split) 
+
+        if i == n_rows
+            vec = [rand(F) for _ in 1:(n + m + 1)]
+        else
+            vec = generate_truncated_dual_points(F, max_k_degree - block, 1, n + m, rational_param) 
+        end
+     
+        evals = [derv(vec...) for derv in dervs]
+               
+        for j in 1:(minpoly_ord + m + 1)
+            supp = var_to_sup(j)
+            ind = supp_to_index[supp]
+            if j > m
+                M[i, ind] = evals[j - m]
+            else
+                M[i, ind] = vec[findfirst(isequal(ode.parameters[j]), gens(parent(ode)))]
+            end
+        end
+    end
+
+    # filling the rest of the columns
+    for i in (minpoly_ord + m + 3):lsup
+        supp = support[i]
+        supp_divisor = copy(supp)
+        nonzero_ind = findfirst(e -> e > 0, supp_divisor)
+        supp_divisor[nonzero_ind] -= 1                                                 
+        multiplier = zeros(Int, minpoly_ord + m + 1)
+        multiplier[nonzero_ind] += 1
+        while !haskey(supp_to_index, supp_divisor)
+            nonzero_ind = findfirst(e -> e > 0, supp_divisor)
+            supp_divisor[nonzero_ind] -= 1
+            multiplier[nonzero_ind] += 1
+        end                                                    
+        
+        supp_div_ind = supp_to_index[supp_divisor]
+        mult_ind = get(supp_to_index, multiplier, -1)
+        for j in 1:n_rows
+            if mult_ind == -1
+                multiplier_eval = prod(M[j, 2:(minpoly_ord + m + 2)] .^ multiplier)
+            else
+                multiplier_eval = M[j, mult_ind]
+            end
+            M[j, i] = M[j, supp_div_ind] * multiplier_eval           
+        end
+    end
+
+    old_index = Dict(s => i for (i, s) in enumerate(old_support))
+    perm = [old_index[s] for s in new_support]
+
+    M = M[:, perm]
+
+    return M
+end
+
 
 function submatrix_dual_matrix(M, index, size_rows, size_col)
     F = base_ring(M[1,2].poly)
@@ -207,7 +289,17 @@ function generate_submatrix_subsequence(F, ode, n, m, dervs, minpoly_ord, suppor
 
     k = length(splits[2]) - 2
 
-    M = build_matrix_truncated(F, ode, n, m, n_rows + 1, k, dervs, minpoly_ord, support, rational_param; info = true)
+    ############################
+    # fill the matrix with trancated epsilon ps
+    #@info "old way"
+    # M = build_matrix_truncated(F, ode, n, m, n_rows + 1, k, dervs, minpoly_ord, support, rational_param; info = true)
+    # ###########################
+
+    ############################
+    # fill the matrix with trancated epsilon ps
+    @info "new way"
+    M = build_smart_matrix_truncated(F, ode, n, m, splits[3], dervs, minpoly_ord, support, rational_param; info = true)
+    ############################
 
     N = []
 
