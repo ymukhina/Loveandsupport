@@ -1,3 +1,4 @@
+# Gleb: should not be here
 using Oscar 
 
 ############################################################################
@@ -6,6 +7,7 @@ using Oscar
 
 const MatrixElement = Union{fpFieldElem, DualNumber{fpFieldElem}}
 
+# Gleb: too many arguments, to discuss wrapping them into a structure
 function build_smart_matrix_truncated(F, ode, n, m, split_array::Vector{Int}, dervs, minpoly_ord, support, rational_param; info = true)
     var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1:(minpoly_ord + m + 1) ]                                           
 
@@ -90,7 +92,7 @@ function build_smart_matrix_truncated(F, ode, n, m, split_array::Vector{Int}, de
     return M
 end
 
-
+# Gleb: what does it do? Add a docstring
 function submatrix_dual_matrix(M, index, size_rows, size_col)
     F = base_ring(M[1,2].poly)
 

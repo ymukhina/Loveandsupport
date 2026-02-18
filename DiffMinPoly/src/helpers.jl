@@ -13,7 +13,9 @@ returns the index of this variable or -1 otherwise.
 """
 
 function is_linear(f)
-    
+
+    # Gleb: may be a bit shorter with
+    # for x in gens(R) ... degree(f, x) ...
     R = parent(f)
     n = ngens(R)
 
@@ -28,9 +30,10 @@ end
 
 function is_pole(F, r, a)
     den = denominator(r)
-    return den(a...) == F(0)
+    return den(a...) == F(0) # iszero(...) function + use evaluate
 end
 
+# Gleb: ??
 function has_denominator(r)
     try
         denominator(r)
@@ -69,8 +72,10 @@ function generate_truncated_dual_points(F, k::Int, n_points::Int, n_vars::Int, r
             vecs[i][j] = rp[j](t...) + sum(rand(F) * Epsilon(Int(k+1), F)^i for i in 1:k+1)
         end
 
+        # Gleb: what is this?
         vecs[i][n_vars + 1] = rand(F) * Epsilon(Int(k+1), F)
   
+        # Gleb: suggest for-loop
         i += 1
     end
 
@@ -89,6 +94,7 @@ function search_rational_parametrization(f, linear_index)
     b = f - xi*a
 
     F = fraction_field(R)
+    # Gleb: you could have used //
     xi_rp = -F(b) / F(a)
 
     gens_F = [F(g) for g in gens_list]
