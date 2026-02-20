@@ -1,8 +1,8 @@
 module DiffMinPoly
 
+include("epsilon.jl")
 include("matrix.jl")
 include("utils.jl")
-include("epsilon.jl")
 include("helpers.jl")
 include("solver_love_and_support.jl")
 include("../test/test_utils.jl")

@@ -1,5 +1,4 @@
-# Gleb: should not be here
-using Oscar 
+# + Gleb: should not be here
 
 ############################################################################
 # updated code for rational parametrisation
@@ -7,11 +6,16 @@ using Oscar
 
 const MatrixElement = Union{fpFieldElem, DualNumber{fpFieldElem}}
 
-# Gleb: too many arguments, to discuss wrapping them into a structure
-function build_smart_matrix_truncated(F, ode, n, m, split_array::Vector{Int}, dervs, minpoly_ord, support, rational_param; info = true)
+# + Gleb: too many arguments, to discuss wrapping them into a structure
+# we say adios to many arguments
+function build_smart_matrix_truncated(F, odeios::ODEios, split_array::Vector{Int}, dervs, rational_param; info = true)
     var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1:(minpoly_ord + m + 1) ]                                           
 
-    support = sort_gleb!(support)
+    n = length(odeios.ode.x_vars)
+    m = length(odeios.ode.parameters)
+    minpoly_ord = odeios.order
+
+    support = sort_gleb!(odeios.support)
     old_support = support
     new_support = copy(support)
     sort_gleb_max!(new_support)
@@ -92,7 +96,15 @@ function build_smart_matrix_truncated(F, ode, n, m, split_array::Vector{Int}, de
     return M
 end
 
-# Gleb: what does it do? Add a docstring
+# + Gleb: what does it do? Add a docstring
+"""
+    submatrix_dual_matrix(M, index, size_rows, size_col)
+
+Extract a submatrix of specified dimensions (size_rows x size_col) from a matrix of DualNumbers M, 
+selecting the coefficient of the graded part at the given index.
+
+"""
+
 function submatrix_dual_matrix(M, index, size_rows, size_col)
     F = base_ring(M[1,2].poly)
 
@@ -121,9 +133,9 @@ function submatrix_dual_matrix(M, index, size_rows, size_col)
 end
 
 
-function generate_submatrix_subsequence(F, ode, n, m, dervs, minpoly_ord, support, rational_param; info = true)
+function generate_submatrix_subsequence(F, odeios::ODEios, dervs, rational_param; info = true)
 
-    support = sort_gleb_max!(support)
+    support = sort_gleb_max!(odeios.support)
     hd = support[end][1]
     splits = split_index(support, hd)
     
@@ -138,7 +150,7 @@ function generate_submatrix_subsequence(F, ode, n, m, dervs, minpoly_ord, suppor
     ############################
     # fill the matrix with trancated epsilon ps
     @info "new way"
-    M = build_smart_matrix_truncated(F, ode, n, m, splits[3], dervs, minpoly_ord, support, rational_param; info = true)
+    M = build_smart_matrix_truncated(F, odeios::ODEios, splits[3], dervs, rational_param; info = true)
     ############################
 
     N = Vector{fpMatrix}(undef, length(splits[1]))

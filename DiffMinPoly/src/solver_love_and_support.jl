@@ -7,6 +7,12 @@ using Random
 
 const Ptype = QQMPolyRingElem
 
+struct ODEios
+    ode::ODE                      
+    support::Vector{PointVector{ZZRingElem}} 
+    order::Int                   
+end
+
 # -------- exported functions -------- #
 
 """
@@ -70,9 +76,9 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
     # y_poly = R_new(y_poly)
 
     if rational_param === nothing
-        is_lin, lin_idx = is_linear(y_poly)
+        is_lin, linear_var = is_linear(y_poly)
         if is_lin
-            rational_param = search_rational_parametrization(y_poly, lin_idx)
+            rational_param = search_rational_parametrization(y_poly, linear_var)
         else 
             rational_param = nothing
         end
@@ -87,7 +93,8 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
 
         ################################
         start1 = time()
-        matrix_seq = generate_submatrix_subsequence(F, ode , n, m, dervs, ord, possible_supp, rational_param)
+        odeios = ODEios(ode, possible_supp, ord)
+        matrix_seq = generate_submatrix_subsequence(F, odeios, dervs, rational_param)
         build_mat = time() - start1
 
         start2 = time()
@@ -108,18 +115,17 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
         #  info && @info "Kernel computation took $solve_ker"
 
         ######################################## 
-        
-        possible_supp = sort_gleb_max!(possible_supp)
-        result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
+        odeios = ODEios(ode, sort_gleb_max!(possible_supp), ord)
+        result = construct_result_polynomial(F, odeios, ker, dim, info=info)
         
         time_end = time() - start
         return result, build_mat, solve_ker, time_end
     else 
         @info "General case"
-        possible_supp = sort_gleb!(possible_supp)
+        odeios = ODEios(ode, sort_gleb!(possible_supp), ord)
         dervs = lie_derivatives(y_poly, ode_mod_p, ord)
         ker, dim = solve_matrix_general(F, ode, n, m, dervs, ord, possible_supp; info=true)
-        result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
+        result = construct_result_polynomial(F, odeios, ker, dim, info=info)
         return result, 0, 0
     end
 
@@ -152,10 +158,11 @@ function eliminate_with_love_and_support_modp_old(ode::ODE, p::Int, ord::Int=min
     dervs = lie_derivatives(y_poly, ode_mod_p, ord)
 
     start1 = time()
+    odeios = ODEios(ode, possible_supp, ord)
     ker, dim = solve_matrix_general(F, ode, n, m, dervs, ord, possible_supp; info=true)
     build_and_solve = time() - start1
 
-    result = construct_result_polynomial(ode, ker, dim, possible_supp, ord, F, info=info)
+    result = construct_result_polynomial(F, odeios, ker, dim, info=info)
     time_end = time() - start
 
     return result, build_and_solve, time_end

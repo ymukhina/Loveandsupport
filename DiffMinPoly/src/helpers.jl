@@ -14,35 +14,31 @@ returns the index of this variable or -1 otherwise.
 
 function is_linear(f)
 
-    # Gleb: may be a bit shorter with
+    # + Gleb: may be a bit shorter with
     # for x in gens(R) ... degree(f, x) ...
     R = parent(f)
-    n = ngens(R)
-
-    for i in 1:n-1
-        if degree(f, i) == 1
-            return true, i
+  
+    for x in gens(R)
+        if degree(f, x) == 1
+            return true, x
         end
     end
 
     return false, -1
 end
 
-function is_pole(F, r, a)
+
+function is_pole(F, r::AbstractAlgebra.Generic.FracFieldElem{fpMPolyRingElem}, a)
     den = denominator(r)
     return den(a...) == F(0) # iszero(...) function + use evaluate
 end
 
-# Gleb: ??
-function has_denominator(r)
-    try
-        denominator(r)
-        return true
-    catch
-        return false
-    end
+function is_pole(F, r::fpPolyRingElem, a)
+    # Polynomials don't have poles, so always return false
+    return false
 end
 
+# + Gleb: ??
 
 # for the rational parametrisation generates the points [sol_1 + ε * rand(F) + ε^2 * rand(F) + ... + ε^k * rand(F), ...]
 function generate_truncated_dual_points(F, k::Int, n_points::Int, n_vars::Int, rp = nothing)
@@ -52,14 +48,13 @@ function generate_truncated_dual_points(F, k::Int, n_points::Int, n_vars::Int, r
     R = parent(rp[1])    
     nv = ngens(R)
 
-    i = 1
-    while i <= n_points
+    for i in 1:n_points
 
         t = [rand(F) for _ in 1:nv]
 
         bad = false
         for r in rp
-            if has_denominator(r) && is_pole(F, r, t)
+            if is_pole(F, r, t)
                 bad = true
                 break
             end
@@ -75,33 +70,31 @@ function generate_truncated_dual_points(F, k::Int, n_points::Int, n_vars::Int, r
         # Gleb: what is this?
         vecs[i][n_vars + 1] = rand(F) * Epsilon(Int(k+1), F)
   
-        # Gleb: suggest for-loop
-        i += 1
+        # + Gleb: suggest for-loop
     end
 
     return vecs
     
 end
 
-function search_rational_parametrization(f, linear_index)
+function search_rational_parametrization(f, linear_var)
     R = parent(f)
     gens_list = gens(R)
     n = length(gens_list)
-    xi = gens_list[linear_index]
     rp = Vector{Any}(undef, n-1)  
 
-    a = derivative(f, xi)
-    b = f - xi*a
+    a = derivative(f, linear_var)
+    b = f - linear_var*a
 
     F = fraction_field(R)
-    # Gleb: you could have used //
-    xi_rp = -F(b) / F(a)
+    # + Gleb: you could have used //
+    linear_var_rp = -F(b) // F(a)
 
     gens_F = [F(g) for g in gens_list]
 
     for i in 1:n-1
-        if i == linear_index
-            rp[i] = xi_rp
+        if gens_list[i] == linear_var 
+            rp[i] = linear_var_rp
         else
             rp[i] = gens_F[i]
         end
@@ -161,22 +154,22 @@ function split_index(support, hd)
 end
 
 
-function construct_result_polynomial(ode, ker, dim, possible_supp, ord, F; info=true)
+function construct_result_polynomial(F, odeios::ODEios, ker, dim; info=true)
 
     start_constructing_time = time()
-    y_var = only(ode.y_vars)
+    y_var = only(odeios.ode.y_vars)
 
 
     R, _ = polynomial_ring(
         F,
         vcat(
-            [var_to_str(p) for p in ode.parameters],
+            [var_to_str(p) for p in odeios.ode.parameters],
             [var_to_str(y_var)],
-            [var_to_str(y_var) * "^($i)" for i in 1:ord],
+            [var_to_str(y_var) * "^($i)" for i in 1:odeios.order],
         )
     )
 
-    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in possible_supp]
+    mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in odeios.support]
 
     
     g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
