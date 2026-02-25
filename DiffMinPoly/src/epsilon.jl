@@ -46,6 +46,7 @@ Base.:*(a::DualNumber{T}, b::DualNumber{T}) where T = begin
     return DualNumber{T}(result_poly, degree)
 end
 
+
 Base.:+(a::DualNumber{T}, b::DualNumber{T}) where T = begin
     degree = min(a.vanishing_degree, b.vanishing_degree)
     result_poly = truncate_poly(a.poly + b.poly, degree)

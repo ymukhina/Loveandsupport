@@ -68,7 +68,7 @@ function generate_truncated_dual_points(F, k::Int, n_points::Int, n_vars::Int, r
         end
 
         # Gleb: what is this?
-        vecs[i][n_vars + 1] = rand(F) * Epsilon(Int(k+1), F)
+        vecs[i][n_vars + 1] = F(0) * Epsilon(Int(k+1), F)
   
         # + Gleb: suggest for-loop
     end
@@ -154,11 +154,17 @@ function split_index(support, hd)
 end
 
 
-function construct_result_polynomial(F, odeios::ODEios, ker, dim; info=true)
+function construct_result_polynomial(F, odeios::ODEios, ker, dim, force_sort::Symbol=:none; info=true)
 
     start_constructing_time = time()
     y_var = only(odeios.ode.y_vars)
 
+    if force_sort == :max
+        sort_gleb_max!(odeios.support)
+    elseif force_sort == :standard
+        sort_gleb!(odeios.support)
+    else
+    end
 
     R, _ = polynomial_ring(
         F,

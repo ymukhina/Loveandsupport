@@ -1,25 +1,20 @@
-# + Gleb: should not be here
-
 ############################################################################
 # updated code for rational parametrisation
 ############################################################################
 
-const MatrixElement = Union{fpFieldElem, DualNumber{fpFieldElem}}
 
 # + Gleb: too many arguments, to discuss wrapping them into a structure
 # we say adios to many arguments
-function build_smart_matrix_truncated(F, odeios::ODEios, split_array::Vector{Int}, dervs, rational_param; info = true)
+function build_smart_matrix_truncated(F, odeios::ODEios, split_array::Vector{Int}, rational_param; info = true)
     var_to_sup = var_ind -> [(k == var_ind) ? 1 : 0 for k in 1:(minpoly_ord + m + 1) ]                                           
 
     n = length(odeios.ode.x_vars)
     m = length(odeios.ode.parameters)
     minpoly_ord = odeios.order
-
-    support = sort_gleb!(odeios.support)
-    old_support = support
-    new_support = copy(support)
-    sort_gleb_max!(new_support)
-
+    dervs = odeios.dervs
+   
+    #Yulia to remove and to have one sort in the whole code!
+    support = odeios.support
     support = [Vector{Int64}(p) for p in support]
 
     lsup = length(support)  
@@ -37,10 +32,13 @@ function build_smart_matrix_truncated(F, odeios::ODEios, split_array::Vector{Int
     supp_to_index = Dict(s => i for (i, s) in enumerate(support))
 
     cum_split = cumsum(split_array)
+    filled_columns = falses(lsup)
+
 
     # filling the columns corresponding to the derivatives
     for i in 1:sum(split_array)+1
         M[i, 1] = F(1)
+        filled_columns[1] = true
         block = findfirst(x -> i <= x, cum_split) 
 
         if i == n_rows
@@ -59,11 +57,15 @@ function build_smart_matrix_truncated(F, odeios::ODEios, split_array::Vector{Int
             else
                 M[i, ind] = vec[findfirst(isequal(ode.parameters[j]), gens(parent(ode)))]
             end
+            filled_columns[ind] = true
         end
     end
 
+
     # filling the rest of the columns
-    for i in (minpoly_ord + m + 3):lsup
+    remaining_indices = findall(.!filled_columns)
+
+    for i in remaining_indices 
         supp = support[i]
         supp_divisor = copy(supp)
         nonzero_ind = findfirst(e -> e > 0, supp_divisor)
@@ -88,13 +90,9 @@ function build_smart_matrix_truncated(F, odeios::ODEios, split_array::Vector{Int
         end
     end
 
-    old_index = Dict(s => i for (i, s) in enumerate(old_support))
-    perm = [old_index[s] for s in new_support]
-
-    M = M[:, perm]
-
     return M
 end
+
 
 # + Gleb: what does it do? Add a docstring
 """
@@ -133,9 +131,9 @@ function submatrix_dual_matrix(M, index, size_rows, size_col)
 end
 
 
-function generate_submatrix_subsequence(F, odeios::ODEios, dervs, rational_param; info = true)
+function generate_submatrix_subsequence(F, odeios::ODEios, rational_param; info = true)
 
-    support = sort_gleb_max!(odeios.support)
+    support = odeios.support
     hd = support[end][1]
     splits = split_index(support, hd)
     
@@ -149,8 +147,8 @@ function generate_submatrix_subsequence(F, odeios::ODEios, dervs, rational_param
 
     ############################
     # fill the matrix with trancated epsilon ps
-    @info "new way"
-    M = build_smart_matrix_truncated(F, odeios::ODEios, splits[3], dervs, rational_param; info = true)
+    @info "very new way "
+    M = build_smart_matrix_truncated(F, odeios::ODEios, splits[3], rational_param; info = true)
     ############################
 
     N = Vector{fpMatrix}(undef, length(splits[1]))
@@ -369,7 +367,7 @@ function solve_matrix_general(F, ode, n, m, dervs, ord::Int, possible_supp; info
     dim = size(ker)[2]
     info && @info "The dimension of the solution space is $(dim)"
 
-    return ker, dim
+    return ker, dim, tim2, system_soltime
 end
 
 

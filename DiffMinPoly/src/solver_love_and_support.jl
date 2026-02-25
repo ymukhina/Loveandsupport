@@ -1,17 +1,3 @@
-using Oscar
-using Nemo
-using StructuralIdentifiability
-using IterTools
-import StructuralIdentifiability: reduce_ode_mod_p, var_to_str, switch_ring
-using Random
-
-const Ptype = QQMPolyRingElem
-
-struct ODEios
-    ode::ODE                      
-    support::Vector{PointVector{ZZRingElem}} 
-    order::Int                   
-end
 
 # -------- exported functions -------- #
 
@@ -52,13 +38,9 @@ Computes a polynomial of the order `ord` over a finite field F_p for the `x` var
 If you know the rational parametrisation of the observation function, add it to rational_param
 
 """
-function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=nothing, ord::Int=minpoly_order(ode),
-    possible_supp::Vector{PointVector{ZZRingElem}}=f_min_support(ode, ord); 
-    info = true)
+function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=nothing; info = true)
 
     start = time()
-
-    @info "Possible support" possible_supp
         
     @assert is_probable_prime(p) "This is not a prime number, Yulia!"  
 
@@ -72,8 +54,6 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
     
     y_poly = R_new(first(values(ode.y_equations)))
     
-    # y_poly = first(values(ode.y_equations))
-    # y_poly = R_new(y_poly)
 
     if rational_param === nothing
         is_lin, linear_var = is_linear(y_poly)
@@ -87,46 +67,27 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
     if !isnothing(rational_param)
     @info "Rational parametrization case"
         
-        dervs = lie_derivatives(y_poly, ode_mod_p, ord)
-       
         @info "new matrix method"
 
         ################################
-        start1 = time()
-        odeios = ODEios(ode, possible_supp, ord)
-        matrix_seq = generate_submatrix_subsequence(F, odeios, dervs, rational_param)
-        build_mat = time() - start1
+       
+        odeios = ODEios(ode_mod_p)
+        @info "Possible support" odeios.support
 
-        start2 = time()
-        ker = constrained_kernel(matrix_seq...)
-        solve_ker = time() - start2
-
+        build_mat = @elapsed matrix_seq = generate_submatrix_subsequence(F, odeios, rational_param)
+        solve_ker = @elapsed ker = constrained_kernel(matrix_seq...)
         dim = size(ker)[2]
-
-        ########################################
-        # @info "Dimention" dim
-
-        #OLD code Max
-        #l = length(possible_supp)
-        #high_deg = possible_supp[end][1]
-        #  splits = split_supp(possible_supp, high_deg)
-        #  ker, dim, build_mat, solve_ker = solve_matrix(F, ode, n, dervs, ord, possible_supp, splits, l, rational_param; info=true) 
-        #  info && @info "Matrix building took $build_mat"
-        #  info && @info "Kernel computation took $solve_ker"
-
-        ######################################## 
-        odeios = ODEios(ode, sort_gleb_max!(possible_supp), ord)
         result = construct_result_polynomial(F, odeios, ker, dim, info=info)
         
         time_end = time() - start
         return result, build_mat, solve_ker, time_end
     else 
         @info "General case"
-        odeios = ODEios(ode, sort_gleb!(possible_supp), ord)
-        dervs = lie_derivatives(y_poly, ode_mod_p, ord)
-        ker, dim = solve_matrix_general(F, ode, n, m, dervs, ord, possible_supp; info=true)
-        result = construct_result_polynomial(F, odeios, ker, dim, info=info)
-        return result, 0, 0
+        odeios = ODEios(ode_mod_p)
+        ker, dim, build_mat, solve_ker = solve_matrix_general(F, ode, n, m, odeios.dervs, odeios.order, sort_gleb!(odeios.support); info=true)
+        result = construct_result_polynomial(F, odeios, ker, dim, :standard, info=info)
+        time_end = time() - start
+        return result, build_mat, solve_ker, time_end
     end
 
 end
@@ -154,18 +115,13 @@ function eliminate_with_love_and_support_modp_old(ode::ODE, p::Int, ord::Int=min
     y_poly = R_new(y_poly)
 
     @info "Durty old town"
-    possible_supp = sort_gleb!(possible_supp)
-    dervs = lie_derivatives(y_poly, ode_mod_p, ord)
 
-    start1 = time()
-    odeios = ODEios(ode, possible_supp, ord)
-    ker, dim = solve_matrix_general(F, ode, n, m, dervs, ord, possible_supp; info=true)
-    build_and_solve = time() - start1
-
-    result = construct_result_polynomial(F, odeios, ker, dim, info=info)
+    odeios = ODEios(ode_mod_p)
+    ker, dim, build_mat, solve_ker = solve_matrix_general(F, ode, n, m, odeios.dervs, odeios.order, sort_gleb!(odeios.support); info=true)
+    result = construct_result_polynomial(F, odeios, ker, dim, :standard, info=info)
     time_end = time() - start
+    return result, build_mat, solve_ker, time_end
 
-    return result, build_and_solve, time_end
 end
 
 
