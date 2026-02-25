@@ -4,6 +4,12 @@ using StructuralIdentifiability
 # functions for the "smart" matrix 
 ##################################
 
+function create_epsilon_series(F::Field, k::Int)
+    R, ε = power_series_ring(F, k, "ε", model = :capped_absolute)
+    return R, ε
+end
+
+
 """
     is_linear(f)
 
@@ -14,8 +20,6 @@ returns the index of this variable or -1 otherwise.
 
 function is_linear(f)
 
-    # + Gleb: may be a bit shorter with
-    # for x in gens(R) ... degree(f, x) ...
     R = parent(f)
   
     for x in gens(R)
@@ -27,7 +31,6 @@ function is_linear(f)
     return false, -1
 end
 
-
 function is_pole(F, r::AbstractAlgebra.Generic.FracFieldElem{fpMPolyRingElem}, a)
     den = denominator(r)
     return den(a...) == F(0) # iszero(...) function + use evaluate
@@ -38,12 +41,39 @@ function is_pole(F, r::fpPolyRingElem, a)
     return false
 end
 
-# + Gleb: ??
+function search_rational_parametrization(f, linear_var)
+    R = parent(f)
+    gens_list = gens(R)
+    n = length(gens_list)
+    rp = Vector{Any}(undef, n-1)  
 
-# for the rational parametrisation generates the points [sol_1 + ε * rand(F) + ε^2 * rand(F) + ... + ε^k * rand(F), ...]
-function generate_truncated_dual_points(F, k::Int, n_points::Int, n_vars::Int, rp = nothing)
+    a = derivative(f, linear_var)
+    b = f - linear_var*a
 
-    vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
+    F = fraction_field(R)
+
+    linear_var_rp = -F(b) // F(a)
+
+    gens_F = [F(g) for g in gens_list]
+
+    for i in 1:n-1
+        if gens_list[i] == linear_var 
+            rp[i] = linear_var_rp
+        else
+            rp[i] = gens_F[i]
+        end
+    end
+
+    return rp
+end
+
+
+
+#for the rational parametrisation generates the points [sol_1 + ε * rand(F) + ε^2 * rand(F) + ... + ε^k * rand(F), ...]
+function generate_truncated_dual_points_new(F, k::Int, n_points::Int, n_vars::Int, rp = nothing)
+
+    R_eps, ε = create_epsilon_series(F, k+1)
+    vecs = Vector{Vector{Any}}(undef, n_points)
     
     R = parent(rp[1])    
     nv = ngens(R)
@@ -61,46 +91,23 @@ function generate_truncated_dual_points(F, k::Int, n_points::Int, n_vars::Int, r
         end
         bad && continue   
 
-        vecs[i] = Vector{DualNumber{fpFieldElem}}(undef, n_vars + 1)    
-    
-        for j in 1:n_vars
-            vecs[i][j] = rp[j](t...) + sum(rand(F) * Epsilon(Int(k+1), F)^i for i in 1:k+1)
-        end
+        vecs[i] = Vector{Any}(undef, n_vars + 1)    
 
-        # Gleb: what is this?
-        vecs[i][n_vars + 1] = F(0) * Epsilon(Int(k+1), F)
-  
-        # + Gleb: suggest for-loop
+        for j in 1:n_vars
+            sol = rp[j](t...) 
+
+            series = sol 
+            for order in 1:k
+                series = series + rand(F) * ε^order
+            end
+            vecs[i][j] = series
+        end
+      
+        vecs[i][n_vars + 1] = zero(R_eps)
     end
 
     return vecs
     
-end
-
-function search_rational_parametrization(f, linear_var)
-    R = parent(f)
-    gens_list = gens(R)
-    n = length(gens_list)
-    rp = Vector{Any}(undef, n-1)  
-
-    a = derivative(f, linear_var)
-    b = f - linear_var*a
-
-    F = fraction_field(R)
-    # + Gleb: you could have used //
-    linear_var_rp = -F(b) // F(a)
-
-    gens_F = [F(g) for g in gens_list]
-
-    for i in 1:n-1
-        if gens_list[i] == linear_var 
-            rp[i] = linear_var_rp
-        else
-            rp[i] = gens_F[i]
-        end
-    end
-
-    return rp
 end
 
 
@@ -154,17 +161,10 @@ function split_index(support, hd)
 end
 
 
-function construct_result_polynomial(F, odeios::ODEios, ker, dim, force_sort::Symbol=:none; info=true)
+function construct_result_polynomial(F, odeios::ODEios, ker, dim; info=true)
 
     start_constructing_time = time()
     y_var = only(odeios.ode.y_vars)
-
-    if force_sort == :max
-        sort_gleb_max!(odeios.support)
-    elseif force_sort == :standard
-        sort_gleb!(odeios.support)
-    else
-    end
 
     R, _ = polynomial_ring(
         F,
@@ -185,97 +185,6 @@ function construct_result_polynomial(F, odeios::ODEios, ker, dim, force_sort::Sy
     return g * (1 // Oscar.leading_coefficient(g))
 end
 
-
-
-
-################################################
-# functions for our old retional parametrisation
-################################################
-
-function generate_points_rational_parametrization(F, n_points::Int, n_vars::Int, dual_deg, rp = nothing)
-    if dual_deg > 1
-        vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
-    else
-        vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
-    end
-
-    
-    R = parent(rp[1])    
-    nv = ngens(R)
-
-    i = 1
-    while i <= n_points
-
-        t = [rand(F) for _ in 1:nv]
-
-        bad = false
-        for r in rp
-            if has_denominator(r) && is_pole(F, r, t)
-                bad = true
-                break
-            end
-        end
-        bad && continue   
-
-       
-        if dual_deg > 1
-            vecs[i] = Vector{DualNumber{fpFieldElem}}(undef, n_vars + 1)
-        else
-            vecs[i] = Vector{fpFieldElem}(undef, n_vars + 1)
-        end
-    
-        for j in 1:n_vars
-            if dual_deg > 1
-                vecs[i][j] = rp[j](t...) + rand(F) * Epsilon(Int(dual_deg), F)
-            else
-                vecs[i][j] = rp[j](t...)
-            end
-        end
-
-        if dual_deg > 1
-            vecs[i][n_vars + 1] = rand(F) * Epsilon(Int(dual_deg), F)
-        else
-            vecs[i][n_vars + 1] = rand(F)
-        end
-
-        i += 1
-    end
-
-    return vecs
-end
-
-###############################################
-# functions for max code
-###############################################
-"""
-    generate_points_base(F, n_points, n_vars, set_x1 = false)
-
-This function generates n_points random interpolation points in the field F and returns them as a vector of vectors.
-
-"""
-
-
-function generate_points_base(F, n_points, n_vars)
-    vecs = Vector{Vector{fpFieldElem}}(undef, n_points)
-
-    for i in 1:n_points
-        vec = [rand(F) for _ in 1:n_vars + 1]
-        vecs[i] = vec
-    end
-    return vecs
-end
-
-function evaluate_polynomial(dervs, point, vanishing_deg)
-   
-    if (vanishing_deg < 2) || (vanishing_deg == false)
-        eval = [derv(point...) for derv in dervs]
-    else   
-        eval = [derv(point) for derv in dervs]
-    end
-    
-
-    return eval
-end
 
 
 # -------- Functions for test of correctness -------- #
@@ -373,4 +282,43 @@ end
 # ————————————————— #
 
 
+# ------------- Some Olde Code ------------#
+
+# for the rational parametrisation generates the points [sol_1 + ε * rand(F) + ε^2 * rand(F) + ... + ε^k * rand(F), ...]
+
+function generate_truncated_dual_points(F, k::Int, n_points::Int, n_vars::Int, rp = nothing)
+
+    vecs = Vector{Vector{DualNumber{fpFieldElem}}}(undef, n_points)
+    
+    R = parent(rp[1])    
+    nv = ngens(R)
+
+    for i in 1:n_points
+
+        t = [rand(F) for _ in 1:nv]
+
+        bad = false
+        for r in rp
+            if is_pole(F, r, t)
+                bad = true
+                break
+            end
+        end
+        bad && continue   
+
+        vecs[i] = Vector{DualNumber{fpFieldElem}}(undef, n_vars + 1)    
+    
+        for j in 1:n_vars
+            vecs[i][j] = rp[j](t...) + sum(rand(F) * Epsilon(Int(k+1), F)^i for i in 1:k+1)
+        end
+
+        # Gleb: what is this?
+        vecs[i][n_vars + 1] = F(0) * Epsilon(Int(k+1), F)
+  
+        # + Gleb: suggest for-loop
+    end
+
+    return vecs
+    
+end
 

@@ -84,8 +84,8 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
     else 
         @info "General case"
         odeios = ODEios(ode_mod_p)
-        ker, dim, build_mat, solve_ker = solve_matrix_general(F, ode, n, m, odeios.dervs, odeios.order, sort_gleb!(odeios.support); info=true)
-        result = construct_result_polynomial(F, odeios, ker, dim, :standard, info=info)
+        ker, dim, build_mat, solve_ker = solve_matrix(F, odeios; info=true)
+        result = construct_result_polynomial(F, odeios, ker, dim, info=info)
         time_end = time() - start
         return result, build_mat, solve_ker, time_end
     end
@@ -93,14 +93,10 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
 end
 
 
-function eliminate_with_love_and_support_modp_old(ode::ODE, p::Int, ord::Int=minpoly_order(ode),
-    possible_supp::Vector{PointVector{ZZRingElem}}=f_min_support(ode, ord); 
+function eliminate_with_love_and_support_modp_old(ode::ODE, p::Int; 
     info = true)
 
     start = time()
-
-    @info "Possible support" possible_supp
-        
     @assert is_probable_prime(p) "This is not a prime number, Yulia!"  
 
     #setup modular enviroment
@@ -108,17 +104,13 @@ function eliminate_with_love_and_support_modp_old(ode::ODE, p::Int, ord::Int=min
     R_new = ode_mod_p.poly_ring
     F = Nemo.Native.GF(p)  
 
-    n = length(ode_mod_p.x_vars)
-    m = length(ode.parameters)
-    
-    y_poly = first(values(ode.y_equations))
-    y_poly = R_new(y_poly)
-
-    @info "Durty old town"
+    @info "Durty old town, durty old town"
 
     odeios = ODEios(ode_mod_p)
-    ker, dim, build_mat, solve_ker = solve_matrix_general(F, ode, n, m, odeios.dervs, odeios.order, sort_gleb!(odeios.support); info=true)
-    result = construct_result_polynomial(F, odeios, ker, dim, :standard, info=info)
+    @info "Possible support" odeios.support
+
+    ker, dim, build_mat, solve_ker = solve_matrix(F, odeios; info=true)
+    result = construct_result_polynomial(F, odeios, ker, dim, info=info) 
     time_end = time() - start
     return result, build_mat, solve_ker, time_end
 
