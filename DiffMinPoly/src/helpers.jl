@@ -161,6 +161,37 @@ function split_index(support, hd)
 end
 
 
+function smarter_split_index(support, hd)
+    splits = split_supp(support, hd)
+    l = length(support)
+   
+    filtered = Int[]
+    for s in splits
+        if l > 6500
+            l - s > l * 0.15 && push!(filtered, s)
+        else
+            l - s > div(l,2)  && push!(filtered, s)
+        end
+    end
+
+    if isempty(filtered)
+        @warn "No splits survived filtering, using default split"
+        filtered = splits 
+    end
+   
+    with_zero = vcat([0], filtered)
+    delta = [with_zero[i] - with_zero[i-1] for i = 2:length(with_zero)]
+    
+    out_splits = vcat(filtered, [splits[end] + 1])
+    last = out_splits[end] - out_splits[end-1]
+    
+    smart = length(delta) == 1 ? [delta[1]] : [delta[i] - delta[i+1] for i = length(delta)-1:-1:1]
+    smart = vcat([delta[end]], smart)
+
+    return vcat(delta, [last]), out_splits, smart
+end
+
+
 function construct_result_polynomial(F, odeios::ODEios, ker, dim; info=true)
 
     start_constructing_time = time()

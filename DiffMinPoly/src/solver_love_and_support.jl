@@ -74,7 +74,8 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
         odeios = ODEios(ode_mod_p)
         @info "Possible support" odeios.support
 
-        build_mat = @elapsed matrix_seq = generate_submatrix_subsequence(F, odeios, rational_param)
+        #build_mat = @elapsed matrix_seq = generate_submatrix_subsequence(F, odeios, rational_param)
+        build_mat = @elapsed matrix_seq = generate_submatrix_subsequence_smart(F, odeios, rational_param)
         solve_ker = @elapsed ker = constrained_kernel(matrix_seq...)
         dim = size(ker)[2]
         result = construct_result_polynomial(F, odeios, ker, dim, info=info)
