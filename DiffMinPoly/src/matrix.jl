@@ -42,8 +42,9 @@ function build_smart_matrix_truncated_dual(F, odeios::ODEios, split_array::Vecto
         block = findfirst(x -> i <= x, cum_split) 
 
         vec_ps = generate_truncated_dual_points_new(F, max_k_degree - block, 1, n + m, rational_param)[1] 
-     
+        # @info "vector to evaluate" vec_ps
         evals = [derv(vec_ps[1:n+1]...) for derv in dervs]
+        # @info "evals" evals
                
         for j in 1:(minpoly_ord + m + 1)
             supp = var_to_sup(j)
@@ -87,7 +88,7 @@ function build_smart_matrix_truncated_dual(F, odeios::ODEios, split_array::Vecto
             M[j, i] = M[j, supp_div_ind] * multiplier_eval           
         end
     end
-
+    # @info "our matrix" M
     return M
 end
 

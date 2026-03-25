@@ -64,6 +64,8 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
         end
     end
 
+    # @info "rat" rational_param
+
     if !isnothing(rational_param)
     @info "Rational parametrization case"
         
@@ -77,7 +79,9 @@ function eliminate_with_love_and_support_modp(ode::ODE, p::Int, rational_param=n
         #build_mat = @elapsed matrix_seq = generate_submatrix_subsequence(F, odeios, rational_param)
         build_mat = @elapsed matrix_seq = generate_submatrix_subsequence_smart(F, odeios, rational_param)
         solve_ker = @elapsed ker = constrained_kernel(matrix_seq...)
+        # @info "kernel???" ker
         dim = size(ker)[2]
+        # @info "what???" dim
         result = construct_result_polynomial(F, odeios, ker, dim, info=info)
         
         time_end = time() - start

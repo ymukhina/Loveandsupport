@@ -237,9 +237,21 @@ push!(
 
     #sample3 we can compute the kernel with the new method
     @ODEmodel(
-        x1'(t) = 3*x1(t) - x2(t),
-        x2'(t) = -3 * x2(t) + 2*x1(t) * x2(t),
-        y(t) = x1(t)
+        x1'(t) = 18 * x1(t) - x1(t) * x2(t),
+        x2'(t) = -19 * x2(t) + 95 * x1(t) * x2(t),
+        y(t) = x1(t) + x2(t) + 1
+    ),
+
+    @ODEmodel(
+        x1'(t) = 18 * x1(t) - x1(t) * x2(t),
+        x2'(t) = -19 * x2(t) + 95 * x1(t) * x2(t),
+        y(t) = x1(t) + x2(t)
+    ),
+
+    @ODEmodel(
+        x1'(t) = 3 * x1(t) - x2(t),
+        x2'(t) =  -3 * x2(t) + 2 *x1(t) * x2(t),
+        y(t) = x1(t) 
     )
 
 )

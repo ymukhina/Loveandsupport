@@ -168,7 +168,7 @@ function smarter_split_index(support, hd)
     filtered = Int[]
     for s in splits
         if l > 6500
-            l - s > l * 0.15 && push!(filtered, s)
+            l - s > l * 0.35 && push!(filtered, s)
         else
             l - s > div(l,2)  && push!(filtered, s)
         end
@@ -208,12 +208,13 @@ function construct_result_polynomial(F, odeios::ODEios, ker, dim; info=true)
 
     mons = [prod([gens(R)[k]^exp[k] for k in 1:ngens(R)]) for exp in odeios.support]
 
-    
     g = gcd([sum([s * m for (s, m) in zip(ker[:, i], mons)]) for i in 1:dim])
+    # @info "qois" g
 
     info && @info "The resulting polynomial computes in $(time() - start_constructing_time)"
 
     return g * (1 // Oscar.leading_coefficient(g))
+    # return g 
 end
 
 
